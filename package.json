@@ -1,6 +1,6 @@
 {
   "name": "phpdoc-generator",
-  "displayName": "PHPDoc Generator",
+  "displayName": "PHPDoc Generator (Hitesh Vaghela)",
   "description": "Intelligently generates and updates PHPDoc blocks for PHP code. Supports command palette, keyboard shortcut, and preserves user docblock content.",
   "version": "0.0.1",
   "engines": {
