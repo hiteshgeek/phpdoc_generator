@@ -1,0 +1,99 @@
+{
+  "name": "phpdoc-generator",
+  "displayName": "PHPDoc Generator",
+  "description": "Intelligently generates and updates PHPDoc blocks for PHP code. Supports command palette, keyboard shortcut, and preserves user docblock content.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:php"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "phpdoc-generator.generatePHPDoc",
+        "title": "Generate PHPDoc"
+      },
+      {
+        "command": "phpdoc-generator.generatePHPDocForAll",
+        "title": "Generate PHPDoc for All Blocks"
+      },
+      {
+        "command": "phpdoc-generator.refreshSettingsCache",
+        "title": "Refresh Settings Cache"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "phpdoc-generator.generatePHPDoc",
+        "key": "ctrl+alt+0",
+        "mac": "cmd+alt+0",
+        "when": "editorTextFocus && editorLangId == php"
+      },
+      {
+        "command": "phpdoc-generator.generatePHPDocForAll",
+        "key": "ctrl+alt+1",
+        "mac": "cmd+alt+1",
+        "when": "editorTextFocus && editorLangId == php"
+      },
+      {
+        "command": "phpdoc-generator.refreshSettingsCache",
+        "key": "ctrl+alt+7",
+        "mac": "cmd+alt+7",
+        "when": "editorTextFocus && editorLangId == php"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "npm run compile-tests && mocha out/test/phpdocDocblock.test.mjs"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.2.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.17.57",
+    "@types/vscode": "^1.100.0",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2",
+    "chai": "^5.2.0",
+    "eslint": "^9.25.1",
+    "mocha": "^11.5.0",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.7",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "mysql2": "^3.14.1",
+    "php-parser": "^3.2.3"
+  },
+  "publisher": "your-publisher-id",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hiteshgeek/phpdoc_generator"
+  },
+  "author": {
+    "name": "Hitesh Vaghela",
+    "email": "hbvaghela83@email.com"
+  },
+  "bugs": {
+    "url": "https://github.com/hiteshgeek/phpdoc_generator/issues"
+  },
+  "homepage": "https://github.com/hiteshgeek/phpdoc_generator"
+}
