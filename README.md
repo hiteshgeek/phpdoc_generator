@@ -1,6 +1,6 @@
 # PHPDoc Generator VS Code Extension
 
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/your-publisher-id.phpdoc-generator.svg)](https://marketplace.visualstudio.com/items?itemName=hiteshgeek.phpdoc-generator-hiteshgeek)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/hiteshgeek.phpdoc-generator-hiteshgeek.svg)](https://marketplace.visualstudio.com/items?itemName=hiteshgeek.phpdoc-generator-hiteshgeek)
 [![GitHub Issues](https://img.shields.io/github/issues/hiteshgeek/phpdoc_generator.svg)](https://github.com/hiteshgeek/phpdoc_generator/issues)
 
 ## Overview
