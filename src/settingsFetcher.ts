@@ -5,11 +5,16 @@ import * as mysql from "mysql2/promise";
 
 export function readSettingsCache(cachePath: string): Record<string, string> {
   if (!fs.existsSync(cachePath)) return {};
-  return JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+  try {
+    return JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+  } catch (e) {
+    // If cache is empty or invalid, return empty object
+    return {};
+  }
 }
 
 function getDBConfigFromVSCode() {
-  const config = vscode.workspace.getConfiguration("phpdocGenerator");
+  const config = vscode.workspace.getConfiguration("phpdocGeneratorHiteshGeek");
   return {
     host: config.get<string>("dbHost") || "",
     port: config.get<number>("dbPort") || 3306,
