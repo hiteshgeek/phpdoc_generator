@@ -1,39 +1,43 @@
+import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import * as mysql from "mysql2/promise";
-import * as dotenv from "dotenv";
-
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
-
-const DB_HOST = process.env.DB_HOST;
-const DB_PORT = process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306;
-const DB_USER = process.env.DB_USER;
-const DB_PASSWORD = process.env.DB_PASSWORD;
-const DB_NAME = process.env.DB_NAME;
 
 export function readSettingsCache(cachePath: string): Record<string, string> {
   if (!fs.existsSync(cachePath)) return {};
   return JSON.parse(fs.readFileSync(cachePath, "utf-8"));
 }
 
+function getDBConfigFromVSCode() {
+  const config = vscode.workspace.getConfiguration("phpdocGenerator");
+  return {
+    host: config.get<string>("dbHost") || "",
+    port: config.get<number>("dbPort") || 3306,
+    user: config.get<string>("dbUser") || "",
+    password: config.get<string>("dbPassword") || "",
+    database: config.get<string>("dbName") || "",
+    licid: config.get<string>("licid") || "",
+  };
+}
+
 export async function fetchAllSettingsDescriptions(): Promise<
   Record<string, string>
 > {
+  const dbConfig = getDBConfigFromVSCode();
   const connection = await mysql.createConnection({
-    host: DB_HOST,
-    port: DB_PORT,
-    user: DB_USER,
-    password: DB_PASSWORD,
-    database: DB_NAME,
+    host: dbConfig.host,
+    port: dbConfig.port,
+    user: dbConfig.user,
+    password: dbConfig.password,
+    database: dbConfig.database,
   });
-  const licid = process.env.LICID;
   // Fetch all settings for this licid
   const [rows] = await connection.execute(
     `SELECT s.title, s.description as data
      FROM licence_system_preferences_mapping lm
      JOIN system_preferences s ON(lm.spid = s.spid)
      WHERE s.spsid != 3 `, //and lm.licid = ?
-    [licid]
+    [dbConfig.licid]
   );
   const descriptions: Record<string, string> = {};
   if (Array.isArray(rows)) {

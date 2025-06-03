@@ -97,5 +97,41 @@
   "bugs": {
     "url": "https://github.com/hiteshgeek/phpdoc_generator/issues"
   },
-  "homepage": "https://github.com/hiteshgeek/phpdoc_generator"
+  "homepage": "https://github.com/hiteshgeek/phpdoc_generator",
+  "configuration": {
+    "type": "object",
+    "title": "PHPDoc Generator",
+    "properties": {
+      "phpdocGenerator.dbHost": {
+        "type": "string",
+        "default": "",
+        "description": "MySQL database host for settings descriptions"
+      },
+      "phpdocGenerator.dbPort": {
+        "type": "number",
+        "default": 3306,
+        "description": "MySQL database port"
+      },
+      "phpdocGenerator.dbUser": {
+        "type": "string",
+        "default": "",
+        "description": "MySQL database user"
+      },
+      "phpdocGenerator.dbPassword": {
+        "type": "string",
+        "default": "",
+        "description": "MySQL database password"
+      },
+      "phpdocGenerator.dbName": {
+        "type": "string",
+        "default": "",
+        "description": "MySQL database name"
+      },
+      "phpdocGenerator.licid": {
+        "type": "string",
+        "default": "",
+        "description": "LICID value for settings fetcher (if required)"
+      }
+    }
+  }
 }
