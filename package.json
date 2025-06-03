@@ -13,6 +13,7 @@
     "onLanguage:php"
   ],
   "main": "./dist/extension.js",
+  "icon": "images/icon.png",
   "contributes": {
     "commands": [
       {
@@ -83,7 +84,8 @@
     "mysql2": "^3.14.1",
     "php-parser": "^3.2.3"
   },
-  "publisher": "your-publisher-id",
+  "publisher": "hiteshgeek",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/hiteshgeek/phpdoc_generator"

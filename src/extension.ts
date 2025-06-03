@@ -31,7 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
     const cachePath = path.resolve(__dirname, "../settings_cache.json");
     let cache: Record<string, string> = {};
     try {
-      // If cache file does not exist, or is empty/empty object, fetch and update
+      // If cache file does not exist, or is empty/empty object, fetch and upd̥̥ate
       if (!fs.existsSync(cachePath)) {
         await updateSettingsCacheAll(cachePath);
       } else {
