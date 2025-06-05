@@ -136,7 +136,16 @@ export function buildDocblock({
   const throwsTags = (otherTags || []).filter((tag) =>
     tag.trim().startsWith("@throws")
   );
-  // const nonThrowsTags = (otherTags || []).filter((tag) => !tag.trim().startsWith("@throws"));
+  const nonThrowsTags = (otherTags || []).filter(
+    (tag) => !tag.trim().startsWith("@throws")
+  );
+
+  // Always add an empty line before the first tag if there is a summary, function name, or settings and at least one tag
+  const hasAnyTag =
+    params.length > 0 || throwsTags.length > 0 || returnType !== undefined;
+  if ((summary || name || (settings && settings.length > 0)) && hasAnyTag) {
+    linesArr.push(" *");
+  }
 
   // PARAMS FIRST
   if (params.length > 0) {
@@ -159,10 +168,7 @@ export function buildDocblock({
     for (const tag of throwsTags) {
       linesArr.push(` * ${tag}`);
     }
-  }
-
-  // EMPTY LINE after throws if return exists
-  if (throwsTags.length > 0 && returnType !== undefined) {
+    // Always add an empty line after throws, even if returnType is undefined
     linesArr.push(" *");
   }
 

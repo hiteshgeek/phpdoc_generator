@@ -76,7 +76,6 @@ export function activate(context: vscode.ExtensionContext) {
     const text = document.getText();
     const blocks = parsePHPBlocks(text);
     const pos = editor.selection.active;
-    // Find the block where the cursor is anywhere inside the function or its docblock
     let block = blocks.find(
       (b) => pos.line >= b.startLine && pos.line <= b.endLine
     );
@@ -122,23 +121,31 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Find settings in function body (search for getSettings("Setting Name"))
     let settings: string[] | undefined = undefined;
+    let throwsTypes: string[] = [];
     if (block.type === "function") {
-      // Find the function body text
       const funcStart = document.lineAt(block.startLine).range.start;
       const funcEnd = document.lineAt(block.endLine).range.end;
       const funcText = document.getText(new vscode.Range(funcStart, funcEnd));
       // Remove commented lines (single-line and multi-line)
       const uncommented = funcText
-        .replace(/\/\*.*?\*\//gs, "") // remove /* ... */
+        .replace(/\/\*.*?\*\//gs, "")
         .split("\n")
         .filter((line) => !line.trim().startsWith("//"))
         .join("\n");
+      // Settings
       const settingsMatches = [
         ...uncommented.matchAll(/getSettings\(["'](.+?)["']\)/g),
       ];
       if (settingsMatches.length > 0) {
         settings = Array.from(new Set(settingsMatches.map((m) => m[1])));
       }
+      // Throws: find all throw new ExceptionType (ignore commented lines)
+      const throwMatches = [
+        ...uncommented.matchAll(/throw\s+new\s+([\w\\]+)/g),
+      ];
+      throwsTypes = Array.from(
+        new Set(throwMatches.map((m: RegExpMatchArray) => m[1]))
+      );
     }
     let settingsDescriptions: Record<string, string> = {};
     if (settings && settings.length > 0) {
@@ -183,6 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
     await editor.edit((editBuilder) => {
       if (!hasDoc) {
         // Insert new docblock
+        const throwsTags = throwsTypes.map((t: string) => `@throws ${t}`);
         const docblock = buildDocblock({
           summary: "",
           params: block.params || [],
@@ -200,6 +208,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
           }),
           type: block.type,
+          otherTags: throwsTags,
         });
         editBuilder.insert(
           document.lineAt(block.startLine).range.start,
@@ -214,7 +223,21 @@ export function activate(context: vscode.ExtensionContext) {
         );
         const oldDocLines = document.getText(docRange).split("\n");
         const oldDoc = parseDocblock(oldDocLines);
-        // If settings are present, update; if not, remove from docblock
+        // Merge throws: add any new throwsTypes not already present, and remove any that are no longer present
+        const existingThrows = (oldDoc.otherTags || []).filter((tag) =>
+          tag.trim().startsWith("@throws")
+        );
+        // Only keep throws that are still present in the code
+        const filteredThrows = existingThrows.filter((tag) =>
+          throwsTypes.includes(tag.replace(/^@throws\s+/, "").trim())
+        );
+        const existingTypes = new Set(
+          filteredThrows.map((tag) => tag.replace(/^@throws\s+/, "").trim())
+        );
+        const newThrows = throwsTypes
+          .filter((t: string) => !existingTypes.has(t))
+          .map((t: string) => `@throws ${t}`);
+        const allThrows = [...filteredThrows, ...newThrows];
         const updated = {
           ...updateDocblock(oldDoc, block.params || [], block.returnType),
           name: block.name,
@@ -222,6 +245,7 @@ export function activate(context: vscode.ExtensionContext) {
             settingsDescriptions[s] ? `${s} : ${settingsDescriptions[s]}` : s
           ),
           type: block.type,
+          otherTags: allThrows,
         };
         const newDoc = buildDocblock(updated);
         editBuilder.replace(docRange, newDoc.join("\n"));
@@ -266,6 +290,7 @@ export function activate(context: vscode.ExtensionContext) {
     await editor.edit((editBuilder) => {
       for (const block of blocks) {
         let settings: string[] | undefined = undefined;
+        let throwsTypes: string[] = [];
         if (block.type === "function") {
           const funcStart = document.lineAt(block.startLine).range.start;
           const funcEnd = document.lineAt(block.endLine).range.end;
@@ -283,6 +308,13 @@ export function activate(context: vscode.ExtensionContext) {
           if (settingsMatches.length > 0) {
             settings = Array.from(new Set(settingsMatches.map((m) => m[1])));
           }
+          // Throws: find all throw new ExceptionType (ignore commented lines)
+          const throwMatches = [
+            ...uncommented.matchAll(/throw\s+new\s+([\w\\]+)/g),
+          ];
+          throwsTypes = Array.from(
+            new Set(throwMatches.map((m: RegExpMatchArray) => m[1]))
+          );
         }
         // Check for existing docblock
         let docStart = block.startLine - 1;
@@ -311,6 +343,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
         if (!hasDoc) {
           // Insert new docblock
+          const throwsTags = throwsTypes.map((t: string) => `@throws ${t}`);
           const docblock = buildDocblock({
             summary: "",
             params: block.params || [],
@@ -328,6 +361,7 @@ export function activate(context: vscode.ExtensionContext) {
               }
             }),
             type: block.type,
+            otherTags: throwsTags,
           });
           editBuilder.insert(
             document.lineAt(block.startLine).range.start,
@@ -341,6 +375,20 @@ export function activate(context: vscode.ExtensionContext) {
           );
           const oldDocLines = document.getText(docRange).split("\n");
           const oldDoc = parseDocblock(oldDocLines);
+          // Merge throws: add any new throwsTypes not already present, and remove any that are no longer present
+          const existingThrows = (oldDoc.otherTags || []).filter((tag) =>
+            tag.trim().startsWith("@throws")
+          );
+          const filteredThrows = existingThrows.filter((tag) =>
+            throwsTypes.includes(tag.replace(/^@throws\s+/, "").trim())
+          );
+          const existingTypes = new Set(
+            filteredThrows.map((tag) => tag.replace(/^@throws\s+/, "").trim())
+          );
+          const newThrows = throwsTypes
+            .filter((t: string) => !existingTypes.has(t))
+            .map((t: string) => `@throws ${t}`);
+          const allThrows = [...filteredThrows, ...newThrows];
           const updated = {
             ...updateDocblock(oldDoc, block.params || [], block.returnType),
             name: block.name,
@@ -348,6 +396,7 @@ export function activate(context: vscode.ExtensionContext) {
               settingsDescriptions[s] ? `${s} : ${settingsDescriptions[s]}` : s
             ),
             type: block.type,
+            otherTags: allThrows,
           };
           const newDoc = buildDocblock(updated);
           editBuilder.replace(docRange, newDoc.join("\n"));
