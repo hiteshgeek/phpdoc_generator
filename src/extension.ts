@@ -10,6 +10,19 @@ import * as fs from "fs";
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+  // Log activation
+  console.log("PHPDoc Generator extension activated");
+
+  // Display message when extension is activated
+  vscode.window.showInformationMessage("PHPDoc Generator extension activated");
+
+  // Check settings
+  const config = vscode.workspace.getConfiguration(
+    "phpdoc-generator-hiteshgeek"
+  );
+  console.log("DB Host setting:", config.get("dbHost"));
+  console.log("DB Port setting:", config.get("dbPort"));
+
   const statusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     100
@@ -63,10 +76,46 @@ export function activate(context: vscode.ExtensionContext) {
     const text = document.getText();
     const blocks = parsePHPBlocks(text);
     const pos = editor.selection.active;
-    const block = blocks.find((b) => b.startLine === pos.line);
+    // Find the block where the cursor is anywhere inside the function or its docblock
+    let block = blocks.find(
+      (b) => pos.line >= b.startLine && pos.line <= b.endLine
+    );
+    // If not found, check if the cursor is inside a docblock just above any block
+    if (!block) {
+      for (const b of blocks) {
+        let docStart = b.startLine - 1;
+        let docEnd = docStart;
+        let hasDoc = false;
+        while (docStart >= 0) {
+          const line = document.lineAt(docStart).text.trim();
+          if (line === "") {
+            docStart--;
+            docEnd--;
+            continue;
+          }
+          if (line.startsWith("/**")) {
+            hasDoc = true;
+            break;
+          }
+          if (!line.startsWith("*") && !line.startsWith("//")) break;
+          docStart--;
+        }
+        if (hasDoc) {
+          docEnd = docStart;
+          while (docEnd < b.startLine) {
+            if (document.lineAt(docEnd).text.includes("*/")) break;
+            docEnd++;
+          }
+          if (pos.line >= docStart && pos.line <= docEnd) {
+            block = b;
+            break;
+          }
+        }
+      }
+    }
     if (!block) {
       vscode.window.showInformationMessage(
-        "Cursor must be on the first line of a PHP block."
+        "Cursor must be inside a PHP function, class, interface, or its docblock."
       );
       return;
     }
@@ -121,6 +170,16 @@ export function activate(context: vscode.ExtensionContext) {
         docEnd++;
       }
     }
+    // Also allow if cursor is inside the docblock
+    if (hasDoc && pos.line >= docStart && pos.line <= docEnd) {
+      // treat as inside the block
+    } else if (!(pos.line >= block.startLine && pos.line <= block.endLine)) {
+      vscode.window.showInformationMessage(
+        "Cursor must be inside a PHP function, class, interface, or its docblock."
+      );
+      return;
+    }
+
     await editor.edit((editBuilder) => {
       if (!hasDoc) {
         // Insert new docblock

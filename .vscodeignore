@@ -12,3 +12,7 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+.env
+*.php
+README_backup.md
+*.vsix

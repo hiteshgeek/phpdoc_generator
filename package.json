@@ -48,7 +48,43 @@
         "mac": "cmd+alt+7",
         "when": "editorTextFocus && editorLangId == php"
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "PHPDoc Generator",
+      "properties": {
+        "phpdoc-generator-hiteshgeek.dbHost": {
+          "type": "string",
+          "default": "",
+          "description": "MySQL database host for settings descriptions"
+        },
+        "phpdoc-generator-hiteshgeek.dbPort": {
+          "type": "number",
+          "default": 3306,
+          "description": "MySQL database port"
+        },
+        "phpdoc-generator-hiteshgeek.dbUser": {
+          "type": "string",
+          "default": "",
+          "description": "MySQL database user"
+        },
+        "phpdoc-generator-hiteshgeek.dbPassword": {
+          "type": "string",
+          "default": "",
+          "description": "MySQL database password"
+        },
+        "phpdoc-generator-hiteshgeek.dbName": {
+          "type": "string",
+          "default": "",
+          "description": "MySQL database name"
+        },
+        "phpdoc-generator-hiteshgeek.licid": {
+          "type": "string",
+          "default": "",
+          "description": "LICID value for settings fetcher (if required)"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -97,41 +133,5 @@
   "bugs": {
     "url": "https://github.com/hiteshgeek/phpdoc_generator/issues"
   },
-  "homepage": "https://github.com/hiteshgeek/phpdoc_generator",
-  "configuration": {
-    "type": "object",
-    "title": "PHPDoc Generator",
-    "properties": {
-      "phpdocGeneratorHiteshGeek.dbHost": {
-        "type": "string",
-        "default": "",
-        "description": "MySQL database host for settings descriptions"
-      },
-      "phpdocGeneratorHiteshGeek.dbPort": {
-        "type": "number",
-        "default": 3306,
-        "description": "MySQL database port"
-      },
-      "phpdocGeneratorHiteshGeek.dbUser": {
-        "type": "string",
-        "default": "",
-        "description": "MySQL database user"
-      },
-      "phpdocGeneratorHiteshGeek.dbPassword": {
-        "type": "string",
-        "default": "",
-        "description": "MySQL database password"
-      },
-      "phpdocGeneratorHiteshGeek.dbName": {
-        "type": "string",
-        "default": "",
-        "description": "MySQL database name"
-      },
-      "phpdocGeneratorHiteshGeek.licid": {
-        "type": "string",
-        "default": "",
-        "description": "LICID value for settings fetcher (if required)"
-      }
-    }
-  }
+  "homepage": "https://github.com/hiteshgeek/phpdoc_generator"
 }

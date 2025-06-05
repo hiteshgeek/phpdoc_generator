@@ -13,8 +13,18 @@ export function readSettingsCache(cachePath: string): Record<string, string> {
   }
 }
 
-function getDBConfigFromVSCode() {
-  const config = vscode.workspace.getConfiguration("phpdocGeneratorHiteshGeek");
+function getDBConfigFromVSCode(): {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+  licid: string;
+} {
+  const config = vscode.workspace.getConfiguration(
+    "phpdoc-generator-hiteshgeek"
+  );
+  console.log("VS Code Config:", JSON.stringify(config));
   return {
     host: config.get<string>("dbHost") || "",
     port: config.get<number>("dbPort") || 3306,
@@ -56,7 +66,17 @@ export async function fetchAllSettingsDescriptions(): Promise<
   return descriptions;
 }
 
-export async function updateSettingsCacheAll(cachePath: string) {
+export async function updateSettingsCacheAll(cachePath: string): Promise<void> {
+  // Show a persistent notification and keep a reference to it
+  const refreshing = vscode.window.showInformationMessage(
+    "Refreshing PHPDoc Generator settings cache...",
+    { modal: false }
+  );
   const descriptions = await fetchAllSettingsDescriptions();
   fs.writeFileSync(cachePath, JSON.stringify(descriptions, null, 2), "utf-8");
+  // There is no direct way to programmatically close a notification in VS Code API,
+  // but we can show the 'finished' message and rely on the user to see the update.
+  vscode.window.showInformationMessage(
+    "PHPDoc Generator settings cache refreshed."
+  );
 }
