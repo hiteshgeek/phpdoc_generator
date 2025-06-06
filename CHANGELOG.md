@@ -4,7 +4,7 @@ All notable changes to the "phpdoc-generator" extension will be documented in th
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
+## [0.0.3] - 2025-06-06
 
 ### Improvements
 
