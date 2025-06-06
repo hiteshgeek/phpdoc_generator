@@ -65,6 +65,7 @@ See the [CHANGELOG.md](./CHANGELOG.md) for full details.
     - Generating/updating PHPDoc for all blocks in the file (`Ctrl+Alt+1`)
     - Generating/updating PHPDoc for the entire project (`Ctrl+Alt+2`)
     - Refreshing the settings cache (`Ctrl+Alt+7`) _(for Accrete Globus Technology only)_
+    - **Toggle Generate/Update on Save** (`Ctrl+Alt+9`)
   - Status bar integration for quick access.
 
 - **Error Handling**

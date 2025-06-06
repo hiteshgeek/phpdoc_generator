@@ -4,6 +4,17 @@ All notable changes to the "phpdoc-generator" extension will be documented in th
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [Unreleased]
+
+### Added
+
+- New setting: **Generate/Update on Save** (checkbox, default: off). When enabled, automatically generates/updates PHPDoc blocks for the entire file every time a PHP file is saved.
+- Status bar indicator for the Generate/Update on Save feature, with click-to-toggle support.
+- Command palette command and keyboard shortcut (`Ctrl+Alt+9`) to toggle the Generate/Update on Save feature.
+- The status bar now updates immediately when the setting is changed from the settings UI.
+
+---
+
 ## [0.0.3] - 2025-06-06
 
 ### Improvements
@@ -57,7 +68,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ---
 
-## [0.0.2] - 2025-04-10
+## [0.0.2] - 2025-06-04
 
 ### Improvements
 
@@ -72,6 +83,6 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ---
 
-## [0.0.1] - 2025-03-01
+## [0.0.1] - 2025-06-04
 
 - Initial release

@@ -218,16 +218,20 @@ export function buildDocblock({
   }
 
   // RETURN
-  // Always ensure exactly one empty line before @return
-  if (linesArr.length === 0 || linesArr[linesArr.length - 1].trim() !== "*") {
-    linesArr.push(pad + " *");
-  }
-  if (returnType !== undefined) {
-    linesArr.push(
-      pad + " * @return " + returnType + (returnDesc ? " " + returnDesc : "")
-    );
-  } else {
-    linesArr.push(pad + " * @return void");
+  // Only add @return for functions/methods
+  const isFunctionLike = type === "function";
+  if (isFunctionLike) {
+    // Always ensure exactly one empty line before @return
+    if (linesArr.length === 0 || linesArr[linesArr.length - 1].trim() !== "*") {
+      linesArr.push(pad + " *");
+    }
+    if (returnType !== undefined) {
+      linesArr.push(
+        pad + " * @return " + returnType + (returnDesc ? " " + returnDesc : "")
+      );
+    } else {
+      linesArr.push(pad + " * @return void");
+    }
   }
 
   // Ensure the last line is '*/' (with a space)

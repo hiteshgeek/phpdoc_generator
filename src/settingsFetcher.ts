@@ -19,7 +19,7 @@ export function getDBConfigFromVSCode(): {
   user: string;
   password: string;
   database: string;
-  licid: string;
+  dbLicid: string;
 } {
   const config = vscode.workspace.getConfiguration(
     "phpdoc-generator-hiteshgeek"
@@ -31,7 +31,7 @@ export function getDBConfigFromVSCode(): {
     user: config.get<string>("dbUser") || "",
     password: config.get<string>("dbPassword") || "",
     database: config.get<string>("dbName") || "",
-    licid: config.get<string>("licid") || "",
+    dbLicid: config.get<string>("dbLicid") || "",
   };
 }
 
@@ -41,7 +41,7 @@ export function isDBConfigComplete(config: {
   user: string;
   password: string;
   database: string;
-  licid: string;
+  dbLicid: string;
 }): boolean {
   return !!(
     config.host &&
@@ -49,7 +49,7 @@ export function isDBConfigComplete(config: {
     config.user &&
     config.password &&
     config.database &&
-    config.licid
+    config.dbLicid
   );
 }
 
@@ -89,7 +89,7 @@ export async function fetchAllSettingsDescriptions(): Promise<
        FROM licence_system_preferences_mapping lm
        JOIN system_preferences s ON(lm.spid = s.spid)
        WHERE s.spsid != 3 `, //and lm.licid = ?
-      [dbConfig.licid]
+      [dbConfig.dbLicid]
     );
   } catch (err: any) {
     vscode.window.showErrorMessage(

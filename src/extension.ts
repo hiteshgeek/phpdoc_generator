@@ -146,15 +146,12 @@ export function activate(context: vscode.ExtensionContext) {
         const returnMatches = Array.from(
           uncommented.matchAll(/return\s+([^;]*);/g)
         );
-        let inferredType: string | undefined = undefined;
+        let inferredTypes: string[] = [];
         if (returnMatches.length > 0) {
-          // If any return is just 'return;', treat as void unless others have value
-          let hasValueReturn = false;
           for (const m of returnMatches) {
             const val = m[1].trim();
+            let inferredType: string | undefined = undefined;
             if (!val) continue;
-            hasValueReturn = true;
-            // Direct values
             if (val === "null") {
               inferredType = "null";
             } else if (val === "true" || val === "false") {
@@ -167,22 +164,18 @@ export function activate(context: vscode.ExtensionContext) {
               inferredType = "float";
             } else if (/^".*"$/.test(val) || /^'.*'$/.test(val)) {
               inferredType = "string";
-              // Object instantiation
             } else if (/^new\s+(static|self)\s*\(/.test(val)) {
               const match = val.match(/^new\s+(static|self)\s*\(/);
               inferredType = match ? match[1] : "mixed";
             } else if (/^new\s+([\\\w]+)\s*\(/.test(val)) {
               const match = val.match(/^new\s+([\\\w]+)\s*\(/);
               inferredType = match ? match[1] : "mixed";
-              // Arithmetic expressions (try to infer int/float if both operands are variables or literals)
             } else if (
               /^\$?[a-zA-Z_][\w]*\s*[+\-*/%]\s*\$?[a-zA-Z_][\w]*$/.test(val)
             ) {
-              // e.g. $a + $b or a + b
               if (block.params && block.params.length >= 2) {
-                // Try to match variable names to params
                 const varMatch = val.match(
-                  /^(\$?[a-zA-Z_][\w]*)\s*[+\-*/%]\s*(\$?[a-zA-Z_][\w]*)$/
+                  /^([\$]?[a-zA-Z_][\w]*)\s*[+\-*/%]\s*([\$]?[a-zA-Z_][\w]*)$/
                 );
                 if (varMatch) {
                   const v1 = varMatch[1].replace(/^\$/, "");
@@ -210,14 +203,12 @@ export function activate(context: vscode.ExtensionContext) {
               } else {
                 inferredType = "mixed";
               }
-              // String concatenation (if both operands are string variables or literals)
             } else if (
               /^\$?[a-zA-Z_][\w]*\s*\.\s*\$?[a-zA-Z_][\w]*$/.test(val)
             ) {
-              // e.g. $a . $b or a . b
               if (block.params && block.params.length >= 2) {
                 const varMatch = val.match(
-                  /^(\$?[a-zA-Z_][\w]*)\s*\.\s*(\$?[a-zA-Z_][\w]*)$/
+                  /^([\$]?[a-zA-Z_][\w]*)\s*\.\s*([\$]?[a-zA-Z_][\w]*)$/
                 );
                 if (varMatch) {
                   const v1 = varMatch[1].replace(/^\$/, "");
@@ -240,12 +231,10 @@ export function activate(context: vscode.ExtensionContext) {
               } else {
                 inferredType = "mixed";
               }
-              // Concatenation (if both sides are string literals)
             } else if (/^(['"][^'"]*['"]\s*\.)+['"][^'"]*['"]$/.test(val)) {
               inferredType = "string";
-              // Ternary expressions (if both branches are same type and can be inferred)
             } else if (
-              /^(.+)\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/.test(
+              /^(.+)?\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/.test(
                 val
               )
             ) {
@@ -253,12 +242,11 @@ export function activate(context: vscode.ExtensionContext) {
                 /^.+\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/
               );
               if (ternaryMatch && ternaryMatch[1] && ternaryMatch[2]) {
-                // Infer type for both branches
                 const branchTypes = [ternaryMatch[1], ternaryMatch[2]].map(
                   (branch) => {
                     if (/^['"]/.test(branch)) return "string";
                     if (/^\d+$/.test(branch)) return "int";
-                    if (/^-?\d*\.\d+$/.test(branch)) return "float";
+                    if (/-?\d*\.\d+$/.test(branch)) return "float";
                     if (branch === "true" || branch === "false") return "bool";
                     if (branch === "null") return "null";
                     return "mixed";
@@ -269,7 +257,6 @@ export function activate(context: vscode.ExtensionContext) {
               } else {
                 inferredType = "mixed";
               }
-              // Variables, function calls, constants
             } else if (
               /^\$[\w_]+$/.test(val) ||
               /\w+\(.*\)/.test(val) ||
@@ -281,17 +268,157 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
               inferredType = "mixed";
             }
-            // If we find a non-void, break (prefer first non-void)
-            if (inferredType && inferredType !== "void") break;
+            if (inferredType) {
+              inferredTypes.push(inferredType);
+            }
           }
-          if (!hasValueReturn) {
-            inferredType = "void";
+          // Remove duplicates and void
+          inferredTypes = Array.from(new Set(inferredTypes.filter(Boolean)));
+          if (inferredTypes.length === 0) {
+            inferredTypes = ["void"];
           }
+          block.returnType = inferredTypes.join("|");
         } else {
-          inferredType = "void";
+          block.returnType = "void";
         }
-        // Patch the block's returnType for docblock generation
-        block.returnType = inferredType;
+      }
+    }
+    // Always generate docblocks for all block types and all children
+    // Enhanced: Infer all possible return types for functions with multiple returns
+    if (block.type === "function" && !block.returnType) {
+      const funcStart = document.lineAt(block.startLine).range.start;
+      const funcEnd = document.lineAt(block.endLine).range.end;
+      const funcText = document.getText(new vscode.Range(funcStart, funcEnd));
+      const uncommented = funcText
+        .replace(/\/\*.*?\*\//gs, "")
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("//"))
+        .join("\n");
+      const returnMatches = Array.from(
+        uncommented.matchAll(/return\s+([^;]*);/g)
+      );
+      let inferredTypes: string[] = [];
+      if (returnMatches.length > 0) {
+        for (const m of returnMatches) {
+          const val = m[1].trim();
+          let inferredType: string | undefined = undefined;
+          if (!val) continue;
+          if (val === "null") {
+            inferredType = "null";
+          } else if (val === "true" || val === "false") {
+            inferredType = "bool";
+          } else if (/^\[.*\]$/.test(val) || /^array\s*\(/.test(val)) {
+            inferredType = "array";
+          } else if (/^-?\d+$/.test(val)) {
+            inferredType = "int";
+          } else if (/^-?\d*\.\d+$/.test(val)) {
+            inferredType = "float";
+          } else if (/^".*"$/.test(val) || /^'.*'$/.test(val)) {
+            inferredType = "string";
+          } else if (/^new\s+(static|self)\s*\(/.test(val)) {
+            const match = val.match(/^new\s+(static|self)\s*\(/);
+            inferredType = match ? match[1] : "mixed";
+          } else if (/^new\s+([\\\w]+)\s*\(/.test(val)) {
+            const match = val.match(/^new\s+([\\\w]+)\s*\(/);
+            inferredType = match ? match[1] : "mixed";
+          } else if (
+            /^\$?[a-zA-Z_][\w]*\s*[+\-*/%]\s*\$?[a-zA-Z_][\w]*$/.test(val)
+          ) {
+            if (block.params && block.params.length >= 2) {
+              const varMatch = val.match(
+                /^([\$]?[a-zA-Z_][\w]*)\s*[+\-*/%]\s*([\$]?[a-zA-Z_][\w]*)$/
+              );
+              if (varMatch) {
+                const v1 = varMatch[1].replace(/^\$/, "");
+                const v2 = varMatch[2].replace(/^\$/, "");
+                const p1 = block.params.find((p) => p.name === v1);
+                const p2 = block.params.find((p) => p.name === v2);
+                if (
+                  (p1 && p1.type === "float") ||
+                  (p2 && p2.type === "float")
+                ) {
+                  inferredType = "float";
+                } else if (p1 && p1.type === "int" && p2 && p2.type === "int") {
+                  inferredType = "int";
+                } else {
+                  inferredType = "mixed";
+                }
+              } else {
+                inferredType = "mixed";
+              }
+            } else {
+              inferredType = "mixed";
+            }
+          } else if (/^\$?[a-zA-Z_][\w]*\s*\.\s*\$?[a-zA-Z_][\w]*$/.test(val)) {
+            if (block.params && block.params.length >= 2) {
+              const varMatch = val.match(
+                /^([\$]?[a-zA-Z_][\w]*)\s*\.\s*([\$]?[a-zA-Z_][\w]*)$/
+              );
+              if (varMatch) {
+                const v1 = varMatch[1].replace(/^\$/, "");
+                const v2 = varMatch[2].replace(/^\$/, "");
+                const p1 = block.params.find((p) => p.name === v1);
+                const p2 = block.params.find((p) => p.name === v2);
+                if (p1 && p1.type === "string" && p2 && p2.type === "string") {
+                  inferredType = "string";
+                } else {
+                  inferredType = "mixed";
+                }
+              } else {
+                inferredType = "mixed";
+              }
+            } else {
+              inferredType = "mixed";
+            }
+          } else if (/^(['"][^'"]*['"]\s*\.)+['"][^'"]*['"]$/.test(val)) {
+            inferredType = "string";
+          } else if (
+            /^(.+)?\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/.test(
+              val
+            )
+          ) {
+            const ternaryMatch = val.match(
+              /^.+\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/
+            );
+            if (ternaryMatch && ternaryMatch[1] && ternaryMatch[2]) {
+              const branchTypes = [ternaryMatch[1], ternaryMatch[2]].map(
+                (branch) => {
+                  if (/^['"]/.test(branch)) return "string";
+                  if (/^\d+$/.test(branch)) return "int";
+                  if (/-?\d*\.\d+$/.test(branch)) return "float";
+                  if (branch === "true" || branch === "false") return "bool";
+                  if (branch === "null") return "null";
+                  return "mixed";
+                }
+              );
+              inferredType =
+                branchTypes[0] === branchTypes[1] ? branchTypes[0] : "mixed";
+            } else {
+              inferredType = "mixed";
+            }
+          } else if (
+            /^\$[\w_]+$/.test(val) ||
+            /\w+\(.*\)/.test(val) ||
+            /^[A-Z_][A-Z0-9_]*$/.test(val) ||
+            /->/.test(val) ||
+            /::/.test(val)
+          ) {
+            inferredType = "mixed";
+          } else {
+            inferredType = "mixed";
+          }
+          if (inferredType) {
+            inferredTypes.push(inferredType);
+          }
+        }
+        // Remove duplicates and void
+        inferredTypes = Array.from(new Set(inferredTypes.filter(Boolean)));
+        if (inferredTypes.length === 0) {
+          inferredTypes = ["void"];
+        }
+        block.returnType = inferredTypes.join("|");
+      } else {
+        block.returnType = "void";
       }
     }
     // Always generate docblocks for all block types and all children
@@ -321,6 +448,16 @@ export function activate(context: vscode.ExtensionContext) {
     }
     // Generate docblock for every block, regardless of type
     if (!hasDoc) {
+      // Ensure there is an empty line before the docblock if not already present
+      const insertLine = block.startLine;
+      const prevLineNum = insertLine - 1;
+      let insertText = "";
+      if (prevLineNum >= 0) {
+        const prevLineText = document.lineAt(prevLineNum).text;
+        if (prevLineText.trim() !== "") {
+          insertText = "\n";
+        }
+      }
       const throwsTagsNew = throwsTypes.map((t: string) => `@throws ${t}`);
       const docblockNew = buildDocblock({
         summary: "",
@@ -349,10 +486,23 @@ export function activate(context: vscode.ExtensionContext) {
         otherTags: throwsTagsNew,
         padding: padding,
       });
-      const insertLine = block.startLine;
-      const insertPos = new vscode.Position(insertLine, 0);
-      editBuilder.insert(insertPos, docblockNew.join("\n") + "\n");
+      editBuilder.insert(
+        new vscode.Position(insertLine, 0),
+        insertText + docblockNew.join("\n") + "\n"
+      );
     } else {
+      // Ensure there is an empty line before the docblock if not already present
+      const prevLineNum = docStart - 1;
+      let needsEmptyLine = false;
+      if (prevLineNum >= 0) {
+        const prevLineText = document.lineAt(prevLineNum).text;
+        if (prevLineText.trim() !== "") {
+          needsEmptyLine = true;
+        }
+      }
+      if (needsEmptyLine) {
+        editBuilder.insert(new vscode.Position(docStart, 0), "\n");
+      }
       const throwsTagsUpd = throwsTypes.map((t: string) => `@throws ${t}`);
       const docRangeUpd = new vscode.Range(
         new vscode.Position(docStart, 0),
@@ -464,11 +614,18 @@ export function activate(context: vscode.ExtensionContext) {
     return undefined;
   }
 
-  // Update generatePHPDoc to use the improved block finder
+  // Command to generate PHPDoc for the current block
   async function generatePHPDoc() {
     const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.languageId !== "php") return;
-    const { document } = editor;
+    if (!editor) {
+      vscode.window.showWarningMessage("No active editor found");
+      return;
+    }
+    const document = editor.document;
+    if (document.languageId !== "php") {
+      vscode.window.showWarningMessage("Active document is not a PHP file");
+      return;
+    }
     const text = document.getText();
     const blocks = parsePHPBlocks(text);
     const pos = editor.selection.active;
@@ -519,7 +676,9 @@ export function activate(context: vscode.ExtensionContext) {
         recurse: false,
       });
     });
-    showStatus("PHPDoc generated");
+    vscode.window.showInformationMessage(
+      "PHPDoc generated/updated for current block."
+    );
   }
 
   async function generatePHPDocForFile() {
@@ -790,8 +949,8 @@ export function activate(context: vscode.ExtensionContext) {
     const dbUser = config.get<string>("dbUser") || "";
     const dbPassword = config.get<string>("dbPassword") || "";
     const dbName = config.get<string>("dbName") || "";
-    const licid = config.get<string>("licid") || "";
-    if (!dbHost || !dbUser || !dbPassword || !dbName || !licid) {
+    const dbLicid = config.get<string>("dbLicid") || "";
+    if (!dbHost || !dbUser || !dbPassword || !dbName || !dbLicid) {
       vscode.window.showErrorMessage(
         "PHPDoc Generator: Database configuration is incomplete. Cannot refresh settings cache.",
         { modal: true }
@@ -834,6 +993,80 @@ export function activate(context: vscode.ExtensionContext) {
       "phpdoc-generator.generatePHPDocForProject",
       generatePHPDocForProject
     )
+  );
+
+  // --- Generate/Update on Save feature ---
+  let generateUpdateOnSave = vscode.workspace
+    .getConfiguration("phpdoc-generator-hiteshgeek")
+    .get<boolean>("generateUpdateOnSave", false);
+
+  // Add status bar item for generate/update on save
+  const generateUpdateOnSaveStatusBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    98
+  );
+  generateUpdateOnSaveStatusBar.command =
+    "phpdoc-generator.toggleGenerateUpdateOnSave";
+  function updateGenerateUpdateOnSaveStatusBar() {
+    generateUpdateOnSaveStatusBar.text = generateUpdateOnSave
+      ? "$(check) PHPDoc: Generate/Update on Save"
+      : "$(circle-slash) PHPDoc: Generate/Update on Save";
+    generateUpdateOnSaveStatusBar.tooltip = generateUpdateOnSave
+      ? "PHPDoc blocks will be generated/updated for the file automatically on save. Click to disable."
+      : "PHPDoc blocks will NOT be generated/updated on save. Click to enable.";
+    generateUpdateOnSaveStatusBar.show();
+  }
+  updateGenerateUpdateOnSaveStatusBar();
+  context.subscriptions.push(generateUpdateOnSaveStatusBar);
+
+  // Command to toggle generate/update on save
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "phpdoc-generator.toggleGenerateUpdateOnSave",
+      async () => {
+        generateUpdateOnSave = !generateUpdateOnSave;
+        await vscode.workspace
+          .getConfiguration("phpdoc-generator-hiteshgeek")
+          .update(
+            "generateUpdateOnSave",
+            generateUpdateOnSave,
+            vscode.ConfigurationTarget.Global
+          );
+        updateGenerateUpdateOnSaveStatusBar();
+        vscode.window.showInformationMessage(
+          `PHPDoc: Generate/Update on Save is now ${
+            generateUpdateOnSave ? "enabled" : "disabled"
+          }.`
+        );
+      }
+    )
+  );
+
+  // Listen for configuration changes to update status bar
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (
+        e.affectsConfiguration(
+          "phpdoc-generator-hiteshgeek.generateUpdateOnSave"
+        )
+      ) {
+        generateUpdateOnSave = vscode.workspace
+          .getConfiguration("phpdoc-generator-hiteshgeek")
+          .get<boolean>("generateUpdateOnSave", false);
+        updateGenerateUpdateOnSaveStatusBar();
+      }
+    })
+  );
+
+  // Listen for file saves and run the command if enabled
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(async (document) => {
+      if (generateUpdateOnSave && document.languageId === "php") {
+        await vscode.commands.executeCommand(
+          "phpdoc-generator.generatePHPDocForFile"
+        );
+      }
+    })
   );
 
   // Keybinding is set in package.json

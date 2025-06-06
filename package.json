@@ -10,7 +10,12 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:php"
+    "onLanguage:php",
+    "onCommand:phpdoc-generator.generatePHPDoc",
+    "onCommand:phpdoc-generator.generatePHPDocForFile",
+    "onCommand:phpdoc-generator.generatePHPDocForProject",
+    "onCommand:phpdoc-generator.refreshSettingsCache",
+    "onCommand:phpdoc-generator.toggleGenerateUpdateOnSave"
   ],
   "main": "./dist/extension.js",
   "icon": "images/icon.png",
@@ -35,6 +40,11 @@
         "command": "phpdoc-generator.refreshSettingsCache",
         "title": "Refresh Settings Cache",
         "category": "PHPDoc Generator"
+      },
+      {
+        "command": "phpdoc-generator.toggleGenerateUpdateOnSave",
+        "title": "Toggle Generate/Update on Save",
+        "category": "PHPDoc Generator"
       }
     ],
     "keybindings": [
@@ -57,12 +67,36 @@
         "key": "ctrl+alt+7",
         "command": "phpdoc-generator.refreshSettingsCache",
         "when": "editorTextFocus"
+      },
+      {
+        "key": "ctrl+alt+9",
+        "command": "phpdoc-generator.toggleGenerateUpdateOnSave",
+        "when": "editorTextFocus"
       }
     ],
     "configuration": {
       "type": "object",
       "title": "PHPDoc Generator",
       "properties": {
+        "phpdoc-generator-hiteshgeek.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/vendor/**",
+            "**/.git/**",
+            "**/.DS_Store"
+          ],
+          "description": "Glob patterns for folders and files to exclude from project-wide docblock generation. Follows the same format as 'files.exclude'."
+        },
+        "phpdoc-generator-hiteshgeek.generateUpdateOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "If enabled, the extension will automatically generate/update PHPDoc blocks for the entire file when any PHP file is saved.",
+          "title": "Generate/Update on Save"
+        },
         "phpdoc-generator-hiteshgeek.dbHost": {
           "type": "string",
           "default": "",
@@ -88,19 +122,10 @@
           "default": "",
           "description": "MySQL database name"
         },
-        "phpdoc-generator-hiteshgeek.licid": {
+        "phpdoc-generator-hiteshgeek.dbLicid": {
           "type": "string",
           "default": "",
           "description": "LICID value for settings fetcher (if required)"
-        },
-        "phpdoc-generator-hiteshgeek.exclude": {
-          "type": "array",
-          "default": [
-            "**/node_modules/**",
-            "**/vendor/**",
-            "**/.git/**"
-          ],
-          "description": "Glob patterns for folders and files to exclude from project-wide docblock generation."
         }
       }
     }
