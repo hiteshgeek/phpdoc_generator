@@ -7,6 +7,9 @@ export interface PHPBlock {
   endLine: number;
   params?: { name: string; type?: string }[];
   returnType?: string;
+  children?: PHPBlock[];
+  level?: number; // 0 = top-level, 1 = child, etc.
+  parent?: PHPBlock;
 }
 
 const parser = new PHPParser.Engine({
@@ -23,20 +26,33 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
     name: string,
     loc: any,
     params?: any[],
-    returnType?: string
-  ) {
-    blocks.push({
+    returnType?: string,
+    parent?: PHPBlock,
+    level: number = 0
+  ): PHPBlock {
+    const block: PHPBlock = {
       type,
       name,
       startLine: loc.start.line - 1,
       endLine: loc.end.line - 1,
       params,
       returnType,
-    });
+      children: [],
+      level,
+      parent,
+    };
+    if (parent) {
+      parent.children = parent.children || [];
+      parent.children.push(block);
+    } else {
+      blocks.push(block);
+    }
+    return block;
   }
 
-  function walk(node: any) {
+  function walk(node: any, parentBlock?: PHPBlock, level: number = 0) {
     if (!node || !node.kind) return;
+    let currentBlock: PHPBlock | undefined;
     switch (node.kind) {
       case "function":
       case "method": {
@@ -45,34 +61,72 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
           type: p.type ? p.type.name : undefined,
         }));
         const returnType = node.type ? node.type.name || node.type : undefined;
-        addBlock(
+        currentBlock = addBlock(
           "function",
           node.name?.name || "",
           node.loc,
           params,
-          returnType
+          returnType,
+          parentBlock,
+          level
         );
         break;
       }
       case "class":
-        addBlock("class", node.name?.name || "", node.loc);
+        currentBlock = addBlock(
+          "class",
+          node.name?.name || "",
+          node.loc,
+          undefined,
+          undefined,
+          parentBlock,
+          level
+        );
         break;
       case "interface":
-        addBlock("interface", node.name?.name || "", node.loc);
+        currentBlock = addBlock(
+          "interface",
+          node.name?.name || "",
+          node.loc,
+          undefined,
+          undefined,
+          parentBlock,
+          level
+        );
         break;
       case "trait":
-        addBlock("trait", node.name?.name || "", node.loc);
+        currentBlock = addBlock(
+          "trait",
+          node.name?.name || "",
+          node.loc,
+          undefined,
+          undefined,
+          parentBlock,
+          level
+        );
         break;
     }
     for (const key in node) {
       if (node.hasOwnProperty(key)) {
         const child = node[key];
-        if (Array.isArray(child)) child.forEach(walk);
-        else if (typeof child === "object" && child && child.kind) walk(child);
+        if (Array.isArray(child))
+          child.forEach((c) =>
+            walk(
+              c,
+              currentBlock || parentBlock,
+              currentBlock ? level + 1 : level
+            )
+          );
+        else if (typeof child === "object" && child && child.kind)
+          walk(
+            child,
+            currentBlock || parentBlock,
+            currentBlock ? level + 1 : level
+          );
       }
     }
   }
 
-  if (ast.children) ast.children.forEach(walk);
+  if (ast.children) ast.children.forEach((c) => walk(c, undefined, 0));
   return blocks;
 }

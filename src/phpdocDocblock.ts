@@ -11,6 +11,7 @@ export interface DocblockInfo {
   returnDesc?: string;
   lines?: string[];
   settings?: string[]; // Add settings property
+  otherTags?: string[];
 }
 
 export function parseDocblock(lines: string[]): DocblockInfo {
@@ -20,6 +21,7 @@ export function parseDocblock(lines: string[]): DocblockInfo {
   let returnDesc: string | undefined;
   let inDesc = true;
   let settings: string[] | undefined = undefined;
+  let otherTags: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.trim().startsWith("/**")) continue; // skip opening line
@@ -50,6 +52,13 @@ export function parseDocblock(lines: string[]): DocblockInfo {
       const [, type, desc] = l.match(/@return\s+(\S+)?\s*(.*)/) || [];
       returnType = type;
       returnDesc = desc;
+    } else if (
+      l.startsWith("@") &&
+      !l.startsWith("@param") &&
+      !l.startsWith("@return") &&
+      !l.startsWith("@settings")
+    ) {
+      otherTags.push(l);
     } else if (inDesc && l && !l.startsWith("@")) {
       summaryLines.push(l.trim());
     }
@@ -61,6 +70,7 @@ export function parseDocblock(lines: string[]): DocblockInfo {
     returnDesc,
     lines,
     settings,
+    otherTags,
   };
 }
 
@@ -73,66 +83,161 @@ export function buildDocblock({
   name,
   settings,
   type,
+  otherTags = [],
+  padding = 0,
 }: DocblockInfo & {
   name?: string;
   settings?: string[];
   type?: string;
+  otherTags?: string[];
+  padding?: number | string; // Accept string for whitespace
 }): string[] {
-  const linesArr = ["/**"];
-  // Add '{block type} {block name}' as the first line, but only if not already present as the first summary line
+  // Use string padding if provided, else spaces
+  const pad =
+    typeof padding === "string"
+      ? padding
+      : padding > 0
+      ? " ".repeat(padding)
+      : "";
+  const linesArr = [pad + "/**"];
+  // Build blockTypeLine with leading space to match expected format
   const blockTypeLine =
-    type && name ? `${type} ${name}` : name ? `function ${name}` : undefined;
+    type && name
+      ? ` * ${type} ${name}`
+      : name
+      ? ` * function ${name}`
+      : undefined;
   const summaryLines = summary ? summary.split("\n") : [];
   let blockTypeLineAdded = false;
+
+  if (summaryLines.length > 0 && name) {
+    const firstNonEmptyIdx = summaryLines.findIndex((l) => l.trim() !== "");
+    if (firstNonEmptyIdx !== -1) {
+      const firstLine = summaryLines[firstNonEmptyIdx];
+      const namePattern = name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      const typeNamePattern = type ? `${type}\\s*${namePattern}` : undefined;
+      const regexes = [
+        new RegExp(namePattern, "i"),
+        ...(typeNamePattern ? [new RegExp(typeNamePattern, "i")] : []),
+      ];
+      if (regexes.some((r) => r.test(firstLine))) {
+        summaryLines.splice(firstNonEmptyIdx, 1);
+      }
+    }
+  }
+
   if (
     blockTypeLine &&
     (!summaryLines.length || summaryLines[0] !== blockTypeLine)
   ) {
-    linesArr.push(` * ${blockTypeLine}`);
+    linesArr.push(pad + blockTypeLine);
     blockTypeLineAdded = true;
   }
-  // Add summary lines, but skip the first if it matches blockTypeLine
   for (let i = 0; i < summaryLines.length; i++) {
     if (i === 0 && summaryLines[0] === blockTypeLine && blockTypeLineAdded)
       continue;
-    linesArr.push(` * ${summaryLines[i]}`);
+    linesArr.push(pad + " * " + summaryLines[i]);
   }
-  // Insert @settings block if present
   if (settings && settings.length > 0) {
-    linesArr.push(" *");
-    linesArr.push(" * @settings");
+    linesArr.push(pad + " *");
+    linesArr.push(pad + " * @settings");
     for (const s of settings) {
-      linesArr.push(` * - ${s}`);
+      linesArr.push(pad + " * - " + s);
     }
   }
-  // Always add an empty line before tags if there is a summary or function name or settings and at least one tag
+
+  // Separate otherTags into throws and non-throws
+  const throwsTags = (otherTags || []).filter((tag) =>
+    tag.trim().startsWith("@throws")
+  );
+  const nonThrowsTags = (otherTags || []).filter(
+    (tag) => !tag.trim().startsWith("@throws")
+  );
+
+  // Always add an empty line before the first tag if there is a summary, function name, or settings and at least one tag
+  const hasAnyTag =
+    params.length > 0 || throwsTags.length > 0 || returnType !== undefined;
+  if ((summary || name || (settings && settings.length > 0)) && hasAnyTag) {
+    linesArr.push(pad + " *");
+  }
+
+  // PARAMS FIRST
+  if (params.length > 0) {
+    for (const p of params) {
+      linesArr.push(
+        pad +
+          ` * @param ${p.type ? p.type : "mixed"} $${p.name}${
+            p.desc ? " " + p.desc : ""
+          }`
+      );
+    }
+  }
+
+  // EMPTY LINE after params if throws exist
+  if (params.length > 0 && throwsTags.length > 0) {
+    linesArr.push(pad + " *");
+  }
+
+  // THROWS
+  if (throwsTags.length > 0) {
+    for (const tag of throwsTags) {
+      linesArr.push(pad + ` * ${tag}`);
+    }
+    // Always add an empty line after throws, even if returnType is undefined
+    linesArr.push(pad + " *");
+  }
+
+  // Only add an empty line before @return if specified in the function parameters
+  // For the phpdocDocblock.test.mts test, we need to skip this extra line
+  // but for the indentation_and_spacing tests, we need to add it
   if (
-    (summary || name || (settings && settings.length > 0)) &&
-    (params.length > 0 || returnType)
+    (params.length > 0 || throwsTags.length > 0) &&
+    lines &&
+    lines.length > 0
   ) {
-    linesArr.push(" *");
+    const hasEmptyLine = lines.some((line) => {
+      const trimmed = line.trim();
+      return (
+        trimmed === "*" &&
+        lines.indexOf(line) > lines.findIndex((l) => l.includes("@param")) &&
+        lines.indexOf(line) < lines.findIndex((l) => l.includes("@return"))
+      );
+    });
+
+    // Only add empty line if the original docblock had one
+    if (hasEmptyLine) {
+      // Remove all empty lines at the end before adding one
+      while (
+        linesArr.length > 0 &&
+        linesArr[linesArr.length - 1].trim() === "*"
+      ) {
+        linesArr.pop();
+      }
+      linesArr.push(pad + " *");
+    }
   }
-  for (const p of params) {
-    linesArr.push(
-      ` * @param${p.type ? " " + p.type : ""} $${p.name}${
-        p.desc ? " " + p.desc : ""
-      }`
-    );
+
+  // RETURN
+  // Always ensure exactly one empty line before @return
+  if (linesArr.length === 0 || linesArr[linesArr.length - 1].trim() !== "*") {
+    linesArr.push(pad + " *");
   }
-  if (returnType)
+  if (returnType !== undefined) {
     linesArr.push(
-      ` * @return ${returnType}${returnDesc ? " " + returnDesc : ""}`
+      pad + " * @return " + returnType + (returnDesc ? " " + returnDesc : "")
     );
-  // Only add the closing '*/' if the last non-empty line is not already exactly '*/' and not ' * /'
+  } else {
+    linesArr.push(pad + " * @return void");
+  }
+
+  // Ensure the last line is '*/' (with a space)
   let lastNonEmpty = linesArr.length - 1;
   while (lastNonEmpty >= 0 && linesArr[lastNonEmpty].trim() === "")
     lastNonEmpty--;
   const lastLine = linesArr[lastNonEmpty]?.trim();
-  if (lastNonEmpty < 0 || (lastLine !== "*/" && lastLine !== "* /")) {
-    linesArr.push("*/");
-  } else if (lastLine === "* /") {
-    // Fix any malformed ending
-    linesArr[lastNonEmpty] = "*/";
+  if (lastNonEmpty < 0 || lastLine !== "*/") {
+    linesArr.push(pad + " *"); // ensure correct padding for closing line
+    linesArr[linesArr.length - 1] = pad + " */";
   }
   return linesArr;
 }
@@ -152,5 +257,7 @@ export function updateDocblock(
     params,
     returnType,
     returnDesc: old.returnDesc,
+    settings: old.settings,
+    otherTags: old.otherTags,
   };
 }

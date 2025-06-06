@@ -5,3 +5,6 @@ node_modules
 *.vsix
 .env
 settings_cache.json
+*.php
+README_backup.md
+*.vsix
