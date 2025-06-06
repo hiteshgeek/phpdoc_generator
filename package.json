@@ -2,7 +2,7 @@
   "name": "phpdoc-generator-hiteshgeek",
   "displayName": "PHPDoc Generator (Hitesh Vaghela)",
   "description": "Intelligently generates and updates PHPDoc blocks for PHP code. Supports command palette, keyboard shortcut, and preserves user docblock content.",
-  "version": "0.0.3",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -18,35 +18,45 @@
     "commands": [
       {
         "command": "phpdoc-generator.generatePHPDoc",
-        "title": "Generate PHPDoc"
+        "title": "Generate/Update for Current Block",
+        "category": "PHPDoc Generator"
       },
       {
-        "command": "phpdoc-generator.generatePHPDocForAll",
-        "title": "Generate PHPDoc for All Blocks"
+        "command": "phpdoc-generator.generatePHPDocForFile",
+        "title": "Generate/Update for Current File",
+        "category": "PHPDoc Generator"
+      },
+      {
+        "command": "phpdoc-generator.generatePHPDocForProject",
+        "title": "Generate/Update for Entire Project",
+        "category": "PHPDoc Generator"
       },
       {
         "command": "phpdoc-generator.refreshSettingsCache",
-        "title": "Refresh Settings Cache"
+        "title": "Refresh Settings Cache",
+        "category": "PHPDoc Generator"
       }
     ],
     "keybindings": [
       {
-        "command": "phpdoc-generator.generatePHPDoc",
         "key": "ctrl+alt+0",
-        "mac": "cmd+alt+0",
-        "when": "editorTextFocus && editorLangId == php"
+        "command": "phpdoc-generator.generatePHPDoc",
+        "when": "editorTextFocus"
       },
       {
-        "command": "phpdoc-generator.generatePHPDocForAll",
         "key": "ctrl+alt+1",
-        "mac": "cmd+alt+1",
-        "when": "editorTextFocus && editorLangId == php"
+        "command": "phpdoc-generator.generatePHPDocForFile",
+        "when": "editorTextFocus"
       },
       {
-        "command": "phpdoc-generator.refreshSettingsCache",
+        "key": "ctrl+alt+2",
+        "command": "phpdoc-generator.generatePHPDocForProject",
+        "when": "editorTextFocus"
+      },
+      {
         "key": "ctrl+alt+7",
-        "mac": "cmd+alt+7",
-        "when": "editorTextFocus && editorLangId == php"
+        "command": "phpdoc-generator.refreshSettingsCache",
+        "when": "editorTextFocus"
       }
     ],
     "configuration": {
@@ -82,6 +92,15 @@
           "type": "string",
           "default": "",
           "description": "LICID value for settings fetcher (if required)"
+        },
+        "phpdoc-generator-hiteshgeek.exclude": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/vendor/**",
+            "**/.git/**"
+          ],
+          "description": "Glob patterns for folders and files to exclude from project-wide docblock generation."
         }
       }
     }

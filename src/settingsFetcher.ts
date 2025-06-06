@@ -13,7 +13,7 @@ export function readSettingsCache(cachePath: string): Record<string, string> {
   }
 }
 
-function getDBConfigFromVSCode(): {
+export function getDBConfigFromVSCode(): {
   host: string;
   port: number;
   user: string;
@@ -35,25 +35,72 @@ function getDBConfigFromVSCode(): {
   };
 }
 
+export function isDBConfigComplete(config: {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+  licid: string;
+}): boolean {
+  return !!(
+    config.host &&
+    config.port &&
+    config.user &&
+    config.password &&
+    config.database &&
+    config.licid
+  );
+}
+
 export async function fetchAllSettingsDescriptions(): Promise<
   Record<string, string>
 > {
   const dbConfig = getDBConfigFromVSCode();
-  const connection = await mysql.createConnection({
-    host: dbConfig.host,
-    port: dbConfig.port,
-    user: dbConfig.user,
-    password: dbConfig.password,
-    database: dbConfig.database,
-  });
-  // Fetch all settings for this licid
-  const [rows] = await connection.execute(
-    `SELECT s.title, s.description as data
-     FROM licence_system_preferences_mapping lm
-     JOIN system_preferences s ON(lm.spid = s.spid)
-     WHERE s.spsid != 3 `, //and lm.licid = ?
-    [dbConfig.licid]
-  );
+  if (!isDBConfigComplete(dbConfig)) {
+    vscode.window.showErrorMessage(
+      "PHPDoc Generator: Database configuration is incomplete. Please check your settings.",
+      { modal: true }
+    );
+    return {};
+  }
+  let connection;
+  try {
+    connection = await mysql.createConnection({
+      host: dbConfig.host,
+      port: dbConfig.port,
+      user: dbConfig.user,
+      password: dbConfig.password,
+      database: dbConfig.database,
+    });
+  } catch (err: any) {
+    vscode.window.showErrorMessage(
+      `PHPDoc Generator: Failed to connect to database. ${
+        err && err.message ? err.message : err
+      }`,
+      { modal: true }
+    );
+    return {};
+  }
+  let rows;
+  try {
+    [rows] = await connection.execute(
+      `SELECT s.title, s.description as data
+       FROM licence_system_preferences_mapping lm
+       JOIN system_preferences s ON(lm.spid = s.spid)
+       WHERE s.spsid != 3 `, //and lm.licid = ?
+      [dbConfig.licid]
+    );
+  } catch (err: any) {
+    vscode.window.showErrorMessage(
+      `PHPDoc Generator: Query error or table not found. ${
+        err && err.message ? err.message : err
+      }`,
+      { modal: true }
+    );
+    await connection.end();
+    return {};
+  }
   const descriptions: Record<string, string> = {};
   if (Array.isArray(rows)) {
     for (const row of rows as any[]) {
@@ -67,15 +114,25 @@ export async function fetchAllSettingsDescriptions(): Promise<
 }
 
 export async function updateSettingsCacheAll(cachePath: string): Promise<void> {
+  const dbConfig = getDBConfigFromVSCode();
+  if (!isDBConfigComplete(dbConfig)) {
+    vscode.window.showErrorMessage(
+      "PHPDoc Generator: Database configuration is incomplete. Cannot refresh settings cache.",
+      { modal: true }
+    );
+    return;
+  }
   // Show a persistent notification and keep a reference to it
-  const refreshing = vscode.window.showInformationMessage(
+  vscode.window.showInformationMessage(
     "Refreshing PHPDoc Generator settings cache...",
     { modal: false }
   );
   const descriptions = await fetchAllSettingsDescriptions();
+  if (Object.keys(descriptions).length === 0) {
+    // Error already shown by fetchAllSettingsDescriptions
+    return;
+  }
   fs.writeFileSync(cachePath, JSON.stringify(descriptions, null, 2), "utf-8");
-  // There is no direct way to programmatically close a notification in VS Code API,
-  // but we can show the 'finished' message and rely on the user to see the update.
   vscode.window.showInformationMessage(
     "PHPDoc Generator settings cache refreshed."
   );

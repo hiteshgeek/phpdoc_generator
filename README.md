@@ -9,6 +9,33 @@
 
 ---
 
+## What's New
+
+See the [CHANGELOG.md](./CHANGELOG.md) for full details.
+
+**Latest Highlights:**
+
+- Automatic synchronization of `@throws` tags in the docblock—new exception types are added when detected in the function, and obsolete tags are removed if the corresponding throw statement is commented out or deleted.
+- The default docblock structure is now:
+
+  ```
+  @param
+
+  @throws
+
+  @return
+  ```
+
+- Parameter and return types are always provided in the docblock, even when not explicitly mentioned in the code (defaults to `mixed` or `void`).
+- **Project-wide docblock generation:** Command: `Generate PHPDoc for Entire Project`, Shortcut: `Ctrl+Alt+2`.
+- **Exclude patterns:** The `phpdoc-generator-hiteshgeek.exclude` setting allows you to specify folders and files to skip during project-wide docblock generation. The default exclude list is:
+  - `**/node_modules/**`
+  - `**/vendor/**`
+  - `**/.git/**`
+- All improvements apply to both single-block, file, and entire-project docblock generation.
+
+---
+
 ## Features
 
 - **Intelligent PHPDoc Generation**
@@ -36,7 +63,8 @@
   - Command palette and keyboard shortcuts for:
     - Generating/updating PHPDoc for the current block (`Ctrl+Alt+0`)
     - Generating/updating PHPDoc for all blocks in the file (`Ctrl+Alt+1`)
-    - Refreshing the settings cache (`Ctrl+Alt+7`)
+    - Generating/updating PHPDoc for the entire project (`Ctrl+Alt+2`)
+    - Refreshing the settings cache (`Ctrl+Alt+7`) _(for Accrete Globus Technology only)_
   - Status bar integration for quick access.
 
 - **Error Handling**
@@ -49,21 +77,7 @@
 
 1. **Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=hiteshgeek.phpdoc-generator-hiteshgeek).**
 2. Open a PHP file and use the command palette or keyboard shortcuts to generate or update PHPDoc blocks.
-3. (Optional) Configure your MySQL credentials and settings cache as described in the extension settings for advanced features.
-
----
-
-## Commands & Shortcuts
-
-- **Generate/Update PHPDoc for Current Block:**
-  - Command Palette: `Generate PHPDoc`
-  - Shortcut: `Ctrl+Alt+0`
-- **Generate/Update PHPDoc for All Blocks:**
-  - Command Palette: `Generate PHPDoc for All Blocks`
-  - Shortcut: `Ctrl+Alt+1`
-- **Refresh Settings Cache:**
-  - Command Palette: `Refresh Settings Cache`
-  - Shortcut: `Ctrl+Alt+7`
+3. (Optional, for Accrete Globus Technology only) Configure your MySQL credentials and settings cache as described in the extension settings for advanced features.
 
 ---
 

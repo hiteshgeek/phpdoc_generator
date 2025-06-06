@@ -16,6 +16,7 @@ describe("phpdocDocblock", () => {
       " *",
       " * @param int $a The first number",
       " * @param int $b The second number",
+      " *", // <-- always expect this empty line before @return
       " * @return int The sum",
       " */",
     ];
