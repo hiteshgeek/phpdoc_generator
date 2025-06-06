@@ -45,6 +45,16 @@
         "command": "phpdoc-generator.toggleGenerateUpdateOnSave",
         "title": "Toggle Generate/Update on Save",
         "category": "PHPDoc Generator"
+      },
+      {
+        "command": "phpdoc-generator.collapseAllDocblocks",
+        "title": "Collapse All Docblocks in File",
+        "category": "PHPDoc Generator"
+      },
+      {
+        "command": "phpdoc-generator.expandAllDocblocks",
+        "title": "Expand All Docblocks in File",
+        "category": "PHPDoc Generator"
       }
     ],
     "keybindings": [
@@ -72,6 +82,16 @@
         "key": "ctrl+alt+9",
         "command": "phpdoc-generator.toggleGenerateUpdateOnSave",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "phpdoc-generator.collapseAllDocblocks",
+        "key": "ctrl+alt+5",
+        "when": "editorTextFocus && editorLangId == php"
+      },
+      {
+        "command": "phpdoc-generator.expandAllDocblocks",
+        "key": "ctrl+alt+6",
+        "when": "editorTextFocus && editorLangId == php"
       }
     ],
     "configuration": {

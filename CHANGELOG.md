@@ -1,9 +1,5 @@
 # Change Log
 
-All notable changes to the "phpdoc-generator" extension will be documented in this file.
-
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
-
 ## [Unreleased]
 
 ### Added
@@ -12,6 +8,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Status bar indicator for the Generate/Update on Save feature, with click-to-toggle support.
 - Command palette command and keyboard shortcut (`Ctrl+Alt+9`) to toggle the Generate/Update on Save feature.
 - The status bar now updates immediately when the setting is changed from the settings UI.
+- **Docblock Folding/Expanding:** Added commands and keyboard shortcuts (`Ctrl+Alt+5` to collapse, `Ctrl+Alt+6` to expand) to fold and unfold all PHPDoc blocks in the current file. These commands are available in the Command Palette as "PHPDoc Generator: Collapse All Docblocks in File" and "PHPDoc Generator: Expand All Docblocks in File".
+- **Custom Folding Provider:** Implemented a custom FoldingRangeProvider so that only PHPDoc blocks are folded/unfolded, and nested/recursive function docblocks are handled correctly. (Better than inbuild docblock collapse\expand commmands)
+- **@var Docblock Support:** The extension now generates `@var` docblocks for all class properties.
+- **Consistent Docblock Formatting:** Improved docblock formatting and tag ordering for robust and consistent output.
 
 ---
 

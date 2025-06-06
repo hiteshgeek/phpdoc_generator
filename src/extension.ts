@@ -1139,6 +1139,71 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Command: Collapse all docblocks in the current file
+  async function collapseAllDocblocks() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) return;
+    const doc = editor.document;
+    const totalLines = doc.lineCount;
+    const ranges: vscode.Range[] = [];
+    let inDocblock = false;
+    let start = 0;
+    for (let i = 0; i < totalLines; ++i) {
+      const line = doc.lineAt(i).text.trim();
+      if (!inDocblock && line.startsWith("/**")) {
+        inDocblock = true;
+        start = i;
+      }
+      if (inDocblock && line.endsWith("*/")) {
+        inDocblock = false;
+        ranges.push(new vscode.Range(start, 0, i, doc.lineAt(i).text.length));
+      }
+    }
+    for (const range of ranges) {
+      editor.selection = new vscode.Selection(range.start, range.start);
+      await vscode.commands.executeCommand("editor.fold");
+    }
+  }
+
+  // Command: Expand all docblocks in the current file
+  async function expandAllDocblocks() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) return;
+    const doc = editor.document;
+    const totalLines = doc.lineCount;
+    const ranges: vscode.Range[] = [];
+    let inDocblock = false;
+    let start = 0;
+    for (let i = 0; i < totalLines; ++i) {
+      const line = doc.lineAt(i).text.trim();
+      if (!inDocblock && line.startsWith("/**")) {
+        inDocblock = true;
+        start = i;
+      }
+      if (inDocblock && line.endsWith("*/")) {
+        inDocblock = false;
+        ranges.push(new vscode.Range(start, 0, i, doc.lineAt(i).text.length));
+      }
+    }
+    for (const range of ranges) {
+      editor.selection = new vscode.Selection(range.start, range.start);
+      await vscode.commands.executeCommand("editor.unfold");
+    }
+  }
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "phpdoc-generator.collapseAllDocblocks",
+      collapseAllDocblocks
+    )
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "phpdoc-generator.expandAllDocblocks",
+      expandAllDocblocks
+    )
+  );
+
   // --- Generate/Update on Save feature ---
   let generateUpdateOnSave = vscode.workspace
     .getConfiguration("phpdoc-generator-hiteshgeek")
@@ -1211,6 +1276,54 @@ export function activate(context: vscode.ExtensionContext) {
         );
       }
     })
+  );
+
+  // Register a FoldingRangeProvider for PHPDoc blocks
+  vscode.languages.registerFoldingRangeProvider(
+    { language: "php" },
+    {
+      provideFoldingRanges(document, context, token) {
+        const ranges = [];
+        const totalLines = document.lineCount;
+        let inDocblock = false;
+        let start = 0;
+        for (let i = 0; i < totalLines; ++i) {
+          const line = document.lineAt(i).text.trim();
+          if (!inDocblock && line.startsWith("/**")) {
+            inDocblock = true;
+            start = i;
+          }
+          if (inDocblock && line.endsWith("*/")) {
+            // Check if the next non-empty, non-comment line is a function definition
+            let nextLine = i + 1;
+            let shouldFold = true;
+            while (nextLine < totalLines) {
+              const nextText = document.lineAt(nextLine).text.trim();
+              if (nextText === "" || nextText.startsWith("*")) {
+                nextLine++;
+                continue;
+              }
+              // If next line is another docblock, do not fold (nested/recursive)
+              if (nextText.startsWith("/**")) {
+                shouldFold = false;
+              }
+              break;
+            }
+            inDocblock = false;
+            if (i > start && shouldFold) {
+              ranges.push(
+                new vscode.FoldingRange(
+                  start,
+                  i,
+                  vscode.FoldingRangeKind.Comment
+                )
+              );
+            }
+          }
+        }
+        return ranges;
+      },
+    }
   );
 
   // Keybinding is set in package.json
