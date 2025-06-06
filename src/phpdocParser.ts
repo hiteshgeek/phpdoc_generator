@@ -1,7 +1,7 @@
 import * as PHPParser from "php-parser";
 
 export interface PHPBlock {
-  type: "function" | "class" | "trait" | "interface";
+  type: "function" | "class" | "trait" | "interface" | "property";
   name: string;
   startLine: number;
   endLine: number;
@@ -82,6 +82,37 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
           parentBlock,
           level
         );
+        // Add properties as children
+        if (Array.isArray(node.body)) {
+          for (const stmt of node.body) {
+            if (stmt.kind === "property") {
+              // PHP-Parser: stmt.name can be Identifier or array of Identifiers (for multiple props)
+              if (Array.isArray(stmt.name)) {
+                for (const n of stmt.name) {
+                  addBlock(
+                    "property",
+                    n.name || "",
+                    stmt.loc,
+                    undefined,
+                    stmt.type ? stmt.type.name || stmt.type : undefined,
+                    currentBlock,
+                    level + 1
+                  );
+                }
+              } else {
+                addBlock(
+                  "property",
+                  stmt.name?.name || "",
+                  stmt.loc,
+                  undefined,
+                  stmt.type ? stmt.type.name || stmt.type : undefined,
+                  currentBlock,
+                  level + 1
+                );
+              }
+            }
+          }
+        }
         break;
       case "interface":
         currentBlock = addBlock(

@@ -566,6 +566,128 @@ export function activate(context: vscode.ExtensionContext) {
       });
       editBuilder.replace(docRangeUpd, newDocUpd.join("\n"));
     }
+    // After handling class docblock, add @var docblocks for each property
+    if (block.type === "class" && block.children && block.children.length > 0) {
+      console.log(
+        `[PHPDoc] Class '${block.name}' children:`,
+        block.children.map((c) => ({
+          type: c.type,
+          name: c.name,
+          startLine: c.startLine,
+          returnType: c.returnType,
+        }))
+      );
+      for (const child of block.children) {
+        if (child.type === "property" && child.name) {
+          const propLine = child.startLine;
+          const propType = child.returnType || "mixed";
+          const propDoc = [
+            getLineIndent(document, propLine) + "/**",
+            getLineIndent(document, propLine) +
+              ` * @var ${propType} Property description`,
+            getLineIndent(document, propLine) + "*/",
+          ];
+          // Check if a docblock already exists above the property (skip whitespace)
+          let hasDoc = false;
+          let checkLine = propLine - 1;
+          while (checkLine >= 0) {
+            const prevLineText = document.lineAt(checkLine).text.trim();
+            if (prevLineText === "") {
+              checkLine--;
+              continue;
+            }
+            if (prevLineText.startsWith("/**")) {
+              hasDoc = true;
+            }
+            break;
+          }
+          if (!hasDoc) {
+            editBuilder.insert(
+              new vscode.Position(propLine, 0),
+              "\n" + propDoc.join("\n") + "\n"
+            );
+          }
+        }
+      }
+    }
+    // Always process property children for class blocks, even if block.children is missing or empty
+    if (block.type === "class") {
+      let propertyBlocks =
+        block.children?.filter((c) => c.type === "property" && c.name) || [];
+      // Fallback: If no children, try to parse property lines directly
+      if (propertyBlocks.length === 0) {
+        const classStart = block.startLine;
+        const classEnd = block.endLine;
+        for (let i = classStart + 1; i < classEnd; ++i) {
+          const line = document.lineAt(i).text.trim();
+          // Match PHP property declaration
+          const match = line.match(
+            /^(public|protected|private)?\s*(static)?\s*([\\\w]+)?\s*\$([a-zA-Z_][\w]*)/
+          );
+          if (match) {
+            const propType = match[3] || "mixed";
+            const propName = match[4];
+            // Check if a docblock already exists above the property (skip whitespace)
+            let hasDoc = false;
+            let checkLine = i - 1;
+            while (checkLine >= 0) {
+              const prevLineText = document.lineAt(checkLine).text.trim();
+              if (prevLineText === "") {
+                checkLine--;
+                continue;
+              }
+              if (prevLineText.startsWith("/**")) {
+                hasDoc = true;
+              }
+              break;
+            }
+            if (!hasDoc) {
+              const propDoc = [
+                getLineIndent(document, i) + "/**",
+                getLineIndent(document, i) +
+                  ` * @var ${propType} Property description`,
+                getLineIndent(document, i) + "*/",
+              ];
+              editBuilder.insert(
+                new vscode.Position(i, 0),
+                "\n" + propDoc.join("\n") + "\n"
+              );
+            }
+          }
+        }
+      } else {
+        for (const child of propertyBlocks) {
+          const propLine = child.startLine;
+          const propType = child.returnType || "mixed";
+          const propDoc = [
+            getLineIndent(document, propLine) + "/**",
+            getLineIndent(document, propLine) +
+              ` * @var ${propType} Property description`,
+            getLineIndent(document, propLine) + "*/",
+          ];
+          // Check if a docblock already exists above the property (skip whitespace)
+          let hasDoc = false;
+          let checkLine = propLine - 1;
+          while (checkLine >= 0) {
+            const prevLineText = document.lineAt(checkLine).text.trim();
+            if (prevLineText === "") {
+              checkLine--;
+              continue;
+            }
+            if (prevLineText.startsWith("/**")) {
+              hasDoc = true;
+            }
+            break;
+          }
+          if (!hasDoc) {
+            editBuilder.insert(
+              new vscode.Position(propLine, 0),
+              "\n" + propDoc.join("\n") + "\n"
+            );
+          }
+        }
+      }
+    }
     // Always recurse into children
     if (recurse && block.children && block.children.length > 0) {
       for (const child of block.children) {
