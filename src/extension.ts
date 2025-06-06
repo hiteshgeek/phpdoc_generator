@@ -284,8 +284,8 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
     // Always generate docblocks for all block types and all children
-    // Enhanced: Infer all possible return types for functions with multiple returns
-    if (block.type === "function" && !block.returnType) {
+    // Use explicit return type from signature if present
+    if (block.type === "function") {
       const funcStart = document.lineAt(block.startLine).range.start;
       const funcEnd = document.lineAt(block.endLine).range.end;
       const funcText = document.getText(new vscode.Range(funcStart, funcEnd));
@@ -294,131 +294,152 @@ export function activate(context: vscode.ExtensionContext) {
         .split("\n")
         .filter((line) => !line.trim().startsWith("//"))
         .join("\n");
-      const returnMatches = Array.from(
-        uncommented.matchAll(/return\s+([^;]*);/g)
-      );
-      let inferredTypes: string[] = [];
-      if (returnMatches.length > 0) {
-        for (const m of returnMatches) {
-          const val = m[1].trim();
-          let inferredType: string | undefined = undefined;
-          if (!val) continue;
-          if (val === "null") {
-            inferredType = "null";
-          } else if (val === "true" || val === "false") {
-            inferredType = "bool";
-          } else if (/^\[.*\]$/.test(val) || /^array\s*\(/.test(val)) {
-            inferredType = "array";
-          } else if (/^-?\d+$/.test(val)) {
-            inferredType = "int";
-          } else if (/^-?\d*\.\d+$/.test(val)) {
-            inferredType = "float";
-          } else if (/^".*"$/.test(val) || /^'.*'$/.test(val)) {
-            inferredType = "string";
-          } else if (/^new\s+(static|self)\s*\(/.test(val)) {
-            const match = val.match(/^new\s+(static|self)\s*\(/);
-            inferredType = match ? match[1] : "mixed";
-          } else if (/^new\s+([\\\w]+)\s*\(/.test(val)) {
-            const match = val.match(/^new\s+([\\\w]+)\s*\(/);
-            inferredType = match ? match[1] : "mixed";
-          } else if (
-            /^\$?[a-zA-Z_][\w]*\s*[+\-*/%]\s*\$?[a-zA-Z_][\w]*$/.test(val)
-          ) {
-            if (block.params && block.params.length >= 2) {
-              const varMatch = val.match(
-                /^([\$]?[a-zA-Z_][\w]*)\s*[+\-*/%]\s*([\$]?[a-zA-Z_][\w]*)$/
-              );
-              if (varMatch) {
-                const v1 = varMatch[1].replace(/^\$/, "");
-                const v2 = varMatch[2].replace(/^\$/, "");
-                const p1 = block.params.find((p) => p.name === v1);
-                const p2 = block.params.find((p) => p.name === v2);
-                if (
-                  (p1 && p1.type === "float") ||
-                  (p2 && p2.type === "float")
-                ) {
-                  inferredType = "float";
-                } else if (p1 && p1.type === "int" && p2 && p2.type === "int") {
-                  inferredType = "int";
-                } else {
-                  inferredType = "mixed";
-                }
-              } else {
-                inferredType = "mixed";
-              }
-            } else {
-              inferredType = "mixed";
-            }
-          } else if (/^\$?[a-zA-Z_][\w]*\s*\.\s*\$?[a-zA-Z_][\w]*$/.test(val)) {
-            if (block.params && block.params.length >= 2) {
-              const varMatch = val.match(
-                /^([\$]?[a-zA-Z_][\w]*)\s*\.\s*([\$]?[a-zA-Z_][\w]*)$/
-              );
-              if (varMatch) {
-                const v1 = varMatch[1].replace(/^\$/, "");
-                const v2 = varMatch[2].replace(/^\$/, "");
-                const p1 = block.params.find((p) => p.name === v1);
-                const p2 = block.params.find((p) => p.name === v2);
-                if (p1 && p1.type === "string" && p2 && p2.type === "string") {
-                  inferredType = "string";
-                } else {
-                  inferredType = "mixed";
-                }
-              } else {
-                inferredType = "mixed";
-              }
-            } else {
-              inferredType = "mixed";
-            }
-          } else if (/^(['"][^'"]*['"]\s*\.)+['"][^'"]*['"]$/.test(val)) {
-            inferredType = "string";
-          } else if (
-            /^(.+)?\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/.test(
-              val
-            )
-          ) {
-            const ternaryMatch = val.match(
-              /^.+\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/
-            );
-            if (ternaryMatch && ternaryMatch[1] && ternaryMatch[2]) {
-              const branchTypes = [ternaryMatch[1], ternaryMatch[2]].map(
-                (branch) => {
-                  if (/^['"]/.test(branch)) return "string";
-                  if (/^\d+$/.test(branch)) return "int";
-                  if (/-?\d*\.\d+$/.test(branch)) return "float";
-                  if (branch === "true" || branch === "false") return "bool";
-                  if (branch === "null") return "null";
-                  return "mixed";
-                }
-              );
-              inferredType =
-                branchTypes[0] === branchTypes[1] ? branchTypes[0] : "mixed";
-            } else {
-              inferredType = "mixed";
-            }
-          } else if (
-            /^\$[\w_]+$/.test(val) ||
-            /\w+\(.*\)/.test(val) ||
-            /^[A-Z_][A-Z0-9_]*$/.test(val) ||
-            /->/.test(val) ||
-            /::/.test(val)
-          ) {
-            inferredType = "mixed";
-          } else {
-            inferredType = "mixed";
-          }
-          if (inferredType) {
-            inferredTypes.push(inferredType);
-          }
-        }
-        // Remove duplicates and void
-        inferredTypes = Array.from(new Set(inferredTypes.filter(Boolean)));
-        if (inferredTypes.length === 0) {
-          inferredTypes = ["void"];
-        }
-        block.returnType = inferredTypes.join("|");
+      // If block.returnType is present (from signature), always use it, even if it's 'void', do not fallback
+      if (
+        typeof block.returnType === "string" &&
+        block.returnType.trim() !== ""
+      ) {
+        // nothing to do, just use block.returnType
       } else {
-        block.returnType = "void";
+        // Find all return statements
+        const returnMatches = Array.from(
+          uncommented.matchAll(/return\s+([^;]*);/g)
+        );
+        let inferredTypes: string[] = [];
+        if (returnMatches.length > 0) {
+          for (const m of returnMatches) {
+            const val = m[1].trim();
+            let inferredType: string | undefined = undefined;
+            if (!val) continue;
+            if (val === "null") {
+              inferredType = "null";
+            } else if (val === "true" || val === "false") {
+              inferredType = "bool";
+            } else if (/^\[.*\]$/.test(val) || /^array\s*\(/.test(val)) {
+              inferredType = "array";
+            } else if (/^-?\d+$/.test(val)) {
+              inferredType = "int";
+            } else if (/^-?\d*\.\d+$/.test(val)) {
+              inferredType = "float";
+            } else if (/^".*"$/.test(val) || /^'.*'$/.test(val)) {
+              inferredType = "string";
+            } else if (/^new\s+(static|self)\s*\(/.test(val)) {
+              const match = val.match(/^new\s+(static|self)\s*\(/);
+              inferredType = match ? match[1] : "mixed";
+            } else if (/^new\s+([\\\w]+)\s*\(/.test(val)) {
+              const match = val.match(/^new\s+([\\\w]+)\s*\(/);
+              inferredType = match ? match[1] : "mixed";
+            } else if (
+              /^\$?[a-zA-Z_][\w]*\s*[+\-*/%]\s*\$?[a-zA-Z_][\w]*$/.test(val)
+            ) {
+              if (block.params && block.params.length >= 2) {
+                const varMatch = val.match(
+                  /^([\$]?[a-zA-Z_][\w]*)\s*[+\-*/%]\s*([\$]?[a-zA-Z_][\w]*)$/
+                );
+                if (varMatch) {
+                  const v1 = varMatch[1].replace(/^\$/, "");
+                  const v2 = varMatch[2].replace(/^\$/, "");
+                  const p1 = block.params.find((p) => p.name === v1);
+                  const p2 = block.params.find((p) => p.name === v2);
+                  if (
+                    (p1 && p1.type === "float") ||
+                    (p2 && p2.type === "float")
+                  ) {
+                    inferredType = "float";
+                  } else if (
+                    p1 &&
+                    p1.type === "int" &&
+                    p2 &&
+                    p2.type === "int"
+                  ) {
+                    inferredType = "int";
+                  } else {
+                    inferredType = "mixed";
+                  }
+                } else {
+                  inferredType = "mixed";
+                }
+              } else {
+                inferredType = "mixed";
+              }
+            } else if (
+              /^\$?[a-zA-Z_][\w]*\s*\.\s*\$?[a-zA-Z_][\w]*$/.test(val)
+            ) {
+              if (block.params && block.params.length >= 2) {
+                const varMatch = val.match(
+                  /^([\$]?[a-zA-Z_][\w]*)\s*\.\s*([\$]?[a-zA-Z_][\w]*)$/
+                );
+                if (varMatch) {
+                  const v1 = varMatch[1].replace(/^\$/, "");
+                  const v2 = varMatch[2].replace(/^\$/, "");
+                  const p1 = block.params.find((p) => p.name === v1);
+                  const p2 = block.params.find((p) => p.name === v2);
+                  if (
+                    p1 &&
+                    p1.type === "string" &&
+                    p2 &&
+                    p2.type === "string"
+                  ) {
+                    inferredType = "string";
+                  } else {
+                    inferredType = "mixed";
+                  }
+                } else {
+                  inferredType = "mixed";
+                }
+              } else {
+                inferredType = "mixed";
+              }
+            } else if (/^(['"][^'"]*['"]\s*\.)+['"][^'"]*['"]$/.test(val)) {
+              inferredType = "string";
+            } else if (
+              /^(.+)?\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/.test(
+                val
+              )
+            ) {
+              const ternaryMatch = val.match(
+                /^.+\?\s*(['"][^'"]*['"]|\d+|true|false|null)\s*:\s*(['"][^'"]*['"]|\d+|true|false|null)$/
+              );
+              if (ternaryMatch && ternaryMatch[1] && ternaryMatch[2]) {
+                const branchTypes = [ternaryMatch[1], ternaryMatch[2]].map(
+                  (branch) => {
+                    if (/^['"]/.test(branch)) return "string";
+                    if (/^\d+$/.test(branch)) return "int";
+                    if (/-?\d*\.\d+$/.test(branch)) return "float";
+                    if (branch === "true" || branch === "false") return "bool";
+                    if (branch === "null") return "null";
+                    return "mixed";
+                  }
+                );
+                inferredType =
+                  branchTypes[0] === branchTypes[1] ? branchTypes[0] : "mixed";
+              } else {
+                inferredType = "mixed";
+              }
+            } else if (
+              /^\$[\w_]+$/.test(val) ||
+              /\w+\(.*\)/.test(val) ||
+              /^[A-Z_][A-Z0-9_]*$/.test(val) ||
+              /->/.test(val) ||
+              /::/.test(val)
+            ) {
+              inferredType = "mixed";
+            } else {
+              inferredType = "mixed";
+            }
+            if (inferredType) {
+              inferredTypes.push(inferredType);
+            }
+          }
+          // Remove duplicates and void
+          inferredTypes = Array.from(new Set(inferredTypes.filter(Boolean)));
+          if (inferredTypes.length === 0) {
+            inferredTypes = ["void"];
+          }
+          block.returnType = inferredTypes.join("|");
+        } else {
+          block.returnType = "void";
+        }
       }
     }
     // Always generate docblocks for all block types and all children
@@ -537,6 +558,7 @@ export function activate(context: vscode.ExtensionContext) {
         type: block.type,
         otherTags: allThrowsUpd,
         lines: [],
+        returnType: block.returnType, // always force update returnType from signature
       };
       const newDocUpd = buildDocblock({
         ...updatedUpd,

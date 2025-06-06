@@ -225,13 +225,15 @@ export function buildDocblock({
     if (linesArr.length === 0 || linesArr[linesArr.length - 1].trim() !== "*") {
       linesArr.push(pad + " *");
     }
-    if (returnType !== undefined) {
-      linesArr.push(
-        pad + " * @return " + returnType + (returnDesc ? " " + returnDesc : "")
-      );
+    let returnTypeStr = "void";
+    if (typeof returnType === "string" && returnType.trim() !== "") {
+      returnTypeStr = returnType;
     } else {
-      linesArr.push(pad + " * @return void");
+      returnTypeStr = "void";
     }
+    linesArr.push(
+      pad + " * @return " + returnTypeStr + (returnDesc ? " " + returnDesc : "")
+    );
   }
 
   // Ensure the last line is '*/' (with a space)
