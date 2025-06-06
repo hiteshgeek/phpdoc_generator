@@ -236,14 +236,19 @@ export function buildDocblock({
     );
   }
 
-  // Ensure the last line is '*/' (with a space)
+  // Ensure the last line is '*/' (with a space, no stray '* /')
+  // Remove any lines that are just '* /' (malformed close)
+  for (let i = linesArr.length - 1; i >= 0; --i) {
+    if (linesArr[i].trim() === "* /") {
+      linesArr.splice(i, 1);
+    }
+  }
   let lastNonEmpty = linesArr.length - 1;
   while (lastNonEmpty >= 0 && linesArr[lastNonEmpty].trim() === "")
     lastNonEmpty--;
   const lastLine = linesArr[lastNonEmpty]?.trim();
   if (lastNonEmpty < 0 || lastLine !== "*/") {
-    linesArr.push(pad + " *"); // ensure correct padding for closing line
-    linesArr[linesArr.length - 1] = pad + " */";
+    linesArr.push(pad + "*/");
   }
   return linesArr;
 }
