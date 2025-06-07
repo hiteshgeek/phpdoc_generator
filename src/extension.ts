@@ -1139,13 +1139,13 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // Command: Collapse all docblocks in the current file
+  // Command: Collapse all docblocks in the current file (optimized for smoothness)
   async function collapseAllDocblocks() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
     const doc = editor.document;
     const totalLines = doc.lineCount;
-    const ranges: vscode.Range[] = [];
+    const starts: vscode.Position[] = [];
     let inDocblock = false;
     let start = 0;
     for (let i = 0; i < totalLines; ++i) {
@@ -1156,22 +1156,25 @@ export function activate(context: vscode.ExtensionContext) {
       }
       if (inDocblock && line.endsWith("*/")) {
         inDocblock = false;
-        ranges.push(new vscode.Range(start, 0, i, doc.lineAt(i).text.length));
+        // Only fold if block is at least 2 lines
+        if (i > start) {
+          starts.push(new vscode.Position(start, 0));
+        }
       }
     }
-    for (const range of ranges) {
-      editor.selection = new vscode.Selection(range.start, range.start);
+    if (starts.length > 0) {
+      editor.selections = starts.map((pos) => new vscode.Selection(pos, pos));
       await vscode.commands.executeCommand("editor.fold");
     }
   }
 
-  // Command: Expand all docblocks in the current file
+  // Command: Expand all docblocks in the current file (optimized for smoothness)
   async function expandAllDocblocks() {
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
     const doc = editor.document;
     const totalLines = doc.lineCount;
-    const ranges: vscode.Range[] = [];
+    const starts: vscode.Position[] = [];
     let inDocblock = false;
     let start = 0;
     for (let i = 0; i < totalLines; ++i) {
@@ -1182,11 +1185,13 @@ export function activate(context: vscode.ExtensionContext) {
       }
       if (inDocblock && line.endsWith("*/")) {
         inDocblock = false;
-        ranges.push(new vscode.Range(start, 0, i, doc.lineAt(i).text.length));
+        if (i > start) {
+          starts.push(new vscode.Position(start, 0));
+        }
       }
     }
-    for (const range of ranges) {
-      editor.selection = new vscode.Selection(range.start, range.start);
+    if (starts.length > 0) {
+      editor.selections = starts.map((pos) => new vscode.Selection(pos, pos));
       await vscode.commands.executeCommand("editor.unfold");
     }
   }
