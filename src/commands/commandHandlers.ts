@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
-import { parsePHPBlocks, PHPBlock } from "../phpdocParser";
+import {
+  parsePHPBlocks,
+  PHPBlock,
+  collectReturnTypesFromFunctionNode,
+} from "../phpdocParser";
 import {
   buildDocblock,
   parseDocblock,
@@ -264,7 +268,7 @@ export async function generatePHPDocForProject() {
             returnType: block.returnType,
             lines: [],
             name: block.name,
-            settings: settings?.map((s) => {
+            settings: settings?.map((s: string) => {
               const desc = settingsDescriptions[s];
               if (desc && desc.trim() && desc.trim() !== s) {
                 return `${s} : ${desc}`;
@@ -308,7 +312,7 @@ export async function generatePHPDocForProject() {
           const updated = {
             ...updateDocblock(oldDoc, block.params || [], block.returnType),
             name: block.name,
-            settings: settings?.map((s) =>
+            settings: settings?.map((s: string) =>
               settingsDescriptions[s] ? `${s} : ${settingsDescriptions[s]}` : s
             ),
             type: block.type,
@@ -518,49 +522,101 @@ async function generateDocblocksRecursive({
     throwsTypes = Array.from(
       new Set(throwMatches.map((m: RegExpMatchArray) => m[1]))
     );
-    // --- Robust return type inference ---
-    const returnMatches = Array.from(
-      uncommented.matchAll(/return\s+([^;]*);/g)
-    );
-    const types = new Set<string>();
-    for (const m of returnMatches) {
-      const val = m[1].trim();
-      if (!val) {
-        types.add("void");
-        continue;
-      }
-      if (val === "null") types.add("null");
-      else if (val === "true" || val === "false") types.add("bool");
-      else if (/^\[.*\]$/.test(val) || /^array\s*\(/.test(val))
-        types.add("array");
-      else if (/^-?\d+$/.test(val)) types.add("int");
-      else if (/^-?\d*\.\d+$/.test(val)) types.add("float");
-      else if (/^".*"$/.test(val) || /^'.*'$/.test(val)) types.add("string");
-      else if (/^new\s+([\\\w]+)\s*\(/.test(val)) {
-        const match = val.match(/^new\s+([\\\w]+)\s*\(/);
-        types.add(match ? match[1] : "mixed");
-      } else if (/^new\s+(static|self)\s*\(/.test(val)) {
-        types.add("mixed");
-      } else if (
-        /^\$[\w_]+$/.test(val) ||
-        /\w+\(.*\)/.test(val) ||
-        /^[A-Z_][A-Z0-9_]*$/.test(val) ||
-        /->/.test(val) ||
-        /::/.test(val)
+    // --- Robust return type inference using AST (ignore nested functions/closures, union all top-level returns) ---
+    const text = document.getText();
+    const PHPParser = require("php-parser");
+    const parser = new PHPParser.Engine({
+      parser: { extractDoc: true },
+      ast: { withPositions: true },
+    });
+    const ast = parser.parseCode(text, "");
+    let targetNode: any = null;
+    function findNode(node: any) {
+      if (!node || typeof node !== "object") return;
+      if (
+        (node.kind === "function" || node.kind === "method") &&
+        node.loc &&
+        node.loc.start.line - 1 === block.startLine &&
+        node.loc.end.line - 1 === block.endLine
       ) {
-        types.add("mixed");
-      } else {
-        types.add("mixed");
+        targetNode = node;
+      }
+      for (const key in node) {
+        if (node.hasOwnProperty(key)) {
+          const child = node[key];
+          if (Array.isArray(child)) child.forEach(findNode);
+          else if (typeof child === "object" && child && child.kind)
+            findNode(child);
+        }
       }
     }
-    // If no return statements, default to void
-    if (types.size === 0) types.add("void");
-    // Collapse union if mixed is present
-    let unionType = Array.from(types).filter(Boolean);
-    if (unionType.includes("mixed")) {
-      unionType = ["mixed"];
+    findNode(ast);
+    if (targetNode) {
+      // Use declared return type if present and ignore inferred types if explicitly declared
+      let declaredType = targetNode.type
+        ? typeof targetNode.type === "string"
+          ? targetNode.type
+          : targetNode.type.name || targetNode.type.raw || targetNode.type
+        : undefined;
+      // If the block has an explicit return type, use only that
+      let useOnlyDeclared = (block as any).hasExplicitReturnType;
+      let inferredTypes: string[] = [];
+      if (!useOnlyDeclared) {
+        inferredTypes =
+          collectReturnTypesFromFunctionNode(targetNode).filter(Boolean);
+      }
+      let uniqueTypes: string[] = useOnlyDeclared
+        ? declaredType
+          ? declaredType
+              .split("|")
+              .map((s: string) => s.trim())
+              .filter((s: string) => !!s)
+          : []
+        : Array.from(new Set(inferredTypes));
+      // Remove 'void' if other types exist
+      if (uniqueTypes.length > 1)
+        uniqueTypes = uniqueTypes.filter((t: string) => t !== "void");
+      // Remove any Exception/Throwable types unless they are actually returned (not just thrown)
+      uniqueTypes = uniqueTypes.filter((t: string) => {
+        if (/Exception$|Error$|Throwable$/.test(t)) {
+          return (
+            inferredTypes &&
+            inferredTypes.includes(t) &&
+            ![
+              "Exception",
+              "Error",
+              "Throwable",
+              "ArithmeticError",
+              "DateMalformedStringException",
+            ].includes(t)
+          );
+        }
+        return true;
+      });
+      // If declared type exists, merge with inferred types (union) unless explicit
+      let unionType = "";
+      if (declaredType) {
+        if (useOnlyDeclared) {
+          unionType = uniqueTypes.sort().join("|");
+        } else {
+          const declaredTypesArr = declaredType
+            .split("|")
+            .map((s: string) => s.trim())
+            .filter((s: string) => !!s);
+          const allTypes = Array.from(
+            new Set([...declaredTypesArr, ...uniqueTypes])
+          );
+          unionType = allTypes.sort().join("|");
+        }
+      } else {
+        unionType = uniqueTypes.sort().join("|");
+      }
+      // Never allow [object Object] or empty string
+      if (!unionType || unionType === "[object Object]") {
+        unionType = "mixed";
+      }
+      block.returnType = unionType || "void";
     }
-    block.returnType = unionType.join("|");
   }
   // Check for existing docblock
   let docStart = block.startLine - 1;
@@ -597,7 +653,7 @@ async function generateDocblocksRecursive({
       name: block.name,
       settings: skipSettings
         ? undefined
-        : settings?.map((s) => {
+        : settings?.map((s: string) => {
             if (
               !settingsDescriptions ||
               Object.keys(settingsDescriptions).length === 0
@@ -644,7 +700,7 @@ async function generateDocblocksRecursive({
     const updated = {
       ...updateDocblock(oldDoc, block.params || [], block.returnType),
       name: block.name,
-      settings: settings?.map((s) =>
+      settings: settings?.map((s: string) =>
         settingsDescriptions[s] ? `${s} : ${settingsDescriptions[s]}` : s
       ),
       type: block.type,

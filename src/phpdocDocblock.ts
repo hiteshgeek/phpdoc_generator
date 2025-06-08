@@ -161,18 +161,19 @@ export function buildDocblock({
   let docblockLines: string[] = [pad + "/**"];
   for (let i = 0; i < groups.length; i++) {
     if (groups[i].length === 0) continue;
-    // Ensure exactly one blank line before @return if previous group is params or throws
+    // Always insert a blank line before @return except if it's the very first group
     if (
       i > 0 &&
       groups[i][0].includes("@return") &&
-      (groups[i - 1][0].includes("@param") ||
-        groups[i - 1][0].includes("@throws"))
+      docblockLines[docblockLines.length - 1] !== pad + " *"
     ) {
-      if (docblockLines[docblockLines.length - 1] !== pad + " *") {
-        docblockLines.push(pad + " *");
-      }
-    } else if (
+      docblockLines.push(pad + " *");
+    }
+    // Otherwise, only insert blank line if previous group is not settings or return
+    else if (
       i > 0 &&
+      !groups[i][0].includes("@return") &&
+      !groups[i - 1][0].includes("@settings") &&
       docblockLines[docblockLines.length - 1] !== pad + " *"
     ) {
       docblockLines.push(pad + " *");
