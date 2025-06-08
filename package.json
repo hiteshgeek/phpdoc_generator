@@ -10,12 +10,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:php",
-    "onCommand:phpdoc-generator.generatePHPDoc",
-    "onCommand:phpdoc-generator.generatePHPDocForFile",
-    "onCommand:phpdoc-generator.generatePHPDocForProject",
-    "onCommand:phpdoc-generator.refreshSettingsCache",
-    "onCommand:phpdoc-generator.toggleGenerateUpdateOnSave"
+    "onLanguage:php"
   ],
   "main": "./dist/extension.js",
   "icon": "images/icon.png",

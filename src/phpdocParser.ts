@@ -30,6 +30,13 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
     parent?: PHPBlock,
     level: number = 0
   ): PHPBlock {
+    if (returnType === "mixed") {
+      console.log(
+        `[DEBUG] parsePHPBlocks: addBlock returnType is 'mixed' for`,
+        type,
+        name
+      );
+    }
     const block: PHPBlock = {
       type,
       name,
@@ -56,12 +63,9 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
     switch (node.kind) {
       case "function":
       case "method": {
-        // PATCH: Robustly extract function name for top-level functions
+        // PATCH: Robustly extract function/method name for top-level and class methods
         let funcName = node.name?.name || node.name || "";
-        // If still empty, try to extract from the code string (for anonymous or parser-missed cases)
         if (!funcName && node.loc && typeof node.loc.start === "object") {
-          // Try to extract from the code text using the start line
-          // This is a fallback and should rarely be needed
           try {
             const lines = (node.loc.source || "").split("\n");
             const line = lines[node.loc.start.line - 1] || "";
@@ -81,7 +85,6 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
             returnType = node.type;
             hasExplicitReturnType = true;
           } else if (Array.isArray(node.type)) {
-            // Handle union types: node.type is an array of type nodes
             returnType = node.type
               .map(
                 (t: any) => t.raw || t.name || (typeof t === "string" ? t : "")
@@ -90,7 +93,6 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
               .join("|");
             hasExplicitReturnType = !!returnType;
           } else if (typeof node.type === "object") {
-            // PATCH: Handle union types in PHP-Parser >= 4.2 (node.type.kind === 'uniontype')
             if (
               node.type.kind === "uniontype" &&
               Array.isArray(node.type.types)
@@ -109,6 +111,7 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
             }
           }
         }
+        // Always use type 'function' for both functions and methods for docblock logic
         currentBlock = addBlock(
           "function",
           funcName,
@@ -118,7 +121,6 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
           parentBlock,
           level
         );
-        // Store a flag on the block to indicate explicit return type
         if (currentBlock && hasExplicitReturnType) {
           (currentBlock as any).hasExplicitReturnType = true;
         }
@@ -242,9 +244,18 @@ export function collectReturnTypesFromFunctionNode(node: any): string[] {
           types.add("array");
         } else if (n.expr.kind === "new") {
           if (n.expr.what && n.expr.what.name) types.add(n.expr.what.name);
-          else types.add("mixed");
+          else {
+            types.add("mixed");
+            console.log(
+              `[DEBUG] collectReturnTypesFromFunctionNode: return new (unknown) => 'mixed'`
+            );
+          }
         } else {
           types.add("mixed");
+          console.log(
+            `[DEBUG] collectReturnTypesFromFunctionNode: return (unknown expr) => 'mixed'`,
+            n.expr
+          );
         }
       } else if (n.kind === "throw") {
         if (
@@ -311,6 +322,12 @@ export function collectReturnTypesFromFunctionNode(node: any): string[] {
   }
   if (node && node.body && Array.isArray(node.body.children)) {
     walkStatements(node.body.children);
+  }
+  if (Array.from(types).includes("mixed")) {
+    console.log(
+      `[DEBUG] collectReturnTypesFromFunctionNode: final types include 'mixed':`,
+      Array.from(types)
+    );
   }
   return Array.from(types);
 }

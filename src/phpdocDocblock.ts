@@ -2,6 +2,7 @@ export * from "./phpdocDocblockParser";
 export * from "./types/docblock";
 
 import { DocblockInfo, ParamDoc } from "./types/docblock";
+import * as vscode from "vscode";
 
 export function buildDocblock({
   summary,
@@ -147,40 +148,33 @@ export function buildDocblock({
 
   // 7. Return
   const returnGroup: string[] = [];
-  if (returnType !== undefined) {
-    const returnLine = `@return ${returnType}${
+  if (type === "function" && returnType !== undefined) {
+    let finalReturnType = returnType === "mixed" ? "void" : returnType;
+    const returnLine = `@return ${finalReturnType}${
       returnDesc ? " " + returnDesc : ""
     }`;
     if (filterNoClosing(returnLine)) returnGroup.push(pad + " * " + returnLine);
-  } else {
+  } else if (type === "function") {
     returnGroup.push(pad + " * @return void");
   }
   if (returnGroup.length > 0) groups.push(returnGroup);
 
   // --- Assemble final docblock ---
   let docblockLines: string[] = [pad + "/**"];
-  for (let i = 0; i < groups.length; i++) {
-    if (groups[i].length === 0) continue;
-    // Always insert a blank line before @return except if it's the very first group
-    if (
-      i > 0 &&
-      groups[i][0].includes("@return") &&
-      docblockLines[docblockLines.length - 1] !== pad + " *"
-    ) {
-      docblockLines.push(pad + " *");
-    }
-    // Otherwise, only insert blank line if previous group is not settings or return
-    else if (
-      i > 0 &&
-      !groups[i][0].includes("@return") &&
-      !groups[i - 1][0].includes("@settings") &&
-      docblockLines[docblockLines.length - 1] !== pad + " *"
-    ) {
-      docblockLines.push(pad + " *");
-    }
-    for (const line of groups[i]) {
-      docblockLines.push(line);
-    }
+  // Clean each group: remove empty lines and accidental closing delimiters
+  const cleanedGroups = groups.map((group) =>
+    group.filter((line) => {
+      const trimmed = line.trim();
+      return trimmed !== "* /" && trimmed !== "*/" && trimmed !== "";
+    })
+  );
+  // Join non-empty groups with exactly one empty line between each group
+  let firstGroup = true;
+  for (const group of cleanedGroups) {
+    if (group.length === 0) continue;
+    if (!firstGroup) docblockLines.push(pad + " *");
+    docblockLines.push(...group);
+    firstGroup = false;
   }
   // Remove any accidental closing delimiters except the last line
   docblockLines = docblockLines.filter((line, idx) => {
@@ -188,7 +182,18 @@ export function buildDocblock({
     if (idx === docblockLines.length - 1) return true; // always keep last line
     return trimmed !== "*/" && trimmed !== "* /";
   });
-  docblockLines.push(pad + " */");
+  // Always end with a single closing delimiter
+  if (docblockLines[docblockLines.length - 1].trim() !== "*/") {
+    docblockLines.push(pad + " */");
+  }
+  // Remove any empty lines at the start or end (except opening/closing)
+  while (docblockLines.length > 2 && docblockLines[1].trim() === "*")
+    docblockLines.splice(1, 1);
+  while (
+    docblockLines.length > 2 &&
+    docblockLines[docblockLines.length - 2].trim() === "*"
+  )
+    docblockLines.splice(docblockLines.length - 2, 1);
   return docblockLines;
 }
 
@@ -210,4 +215,24 @@ export function updateDocblock(
     settings: old.settings,
     otherTags: old.otherTags,
   };
+}
+
+// Add: build property docblock
+export function buildPropertyDocblock({
+  name,
+  type,
+  padding = 0,
+}: {
+  name: string;
+  type?: string;
+  padding?: number | string;
+}): string[] {
+  const pad =
+    typeof padding === "string"
+      ? padding
+      : padding > 0
+      ? " ".repeat(padding)
+      : "";
+  const lines = [pad + "/**", pad + ` * @var ${type || "mixed"}`, pad + " */"];
+  return lines;
 }

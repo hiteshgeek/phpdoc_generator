@@ -18,7 +18,7 @@ function multiple_return_example(array $data, int|string $userId, bool $isTest):
  * @version 1.0
  * @since 2023-10-01 
  *
- * @return float|int|string
+ * @return array|float|int|string
  */
 function a()
 {
@@ -36,12 +36,17 @@ function a()
 
     function c() {}
 
+    /**
+     * function d
+     *
+     * @return mixed
+     */
     function d() {}
 
     // return $value_1;
     return 123;
     return 123.4;
-    // return [];
+    return [];
     return "abc";
 }
 
@@ -62,7 +67,7 @@ function a()
  * @throws Exception
  * @throws ArithmeticError
  *
- * @return Company|User|array|bool|string
+ * @return User|array|bool|string
  */
 function add(float $a, float $b)
 {
@@ -95,13 +100,16 @@ function add(float $a, float $b)
  * @settings
  * - IS_OUTLET_ENABLE
  *
- * @return mixed
+ * @return void
  */
 function lead_add_form()
 {
     getSettings("IS_OUTLET_ENABLE");
 }
 
+/**
+ * class OrderProcessor
+ */
 class OrderProcessor
 {
     private int $orderId;
@@ -109,15 +117,27 @@ class OrderProcessor
     protected int $orderId2;
     public int $orderId3 = 3;
 
-    public function deleteUser(int $userId) {}
+    public function deleteUser(int $userId): string
+    {
+        return "User with ID $userId deleted.";
+    }
 
-    public function addUser(int $userId) {}
+    public function addUser(int $userId): void {}
 
     protected function updateUser(int $userId) {}
 }
 
-function notifyUser(string $email, int $orderId): bool
+/**̥̥̥
+ * function notifyUser
+ *
+ * @param string $email
+ * @param int $orderId
+ *
+ * @return bool
+ */
+function notifyUser(string $email, int $orderId): int|bool|string
 {
+    return 1; // or return true;
     return true; // or return false;
 }
 
