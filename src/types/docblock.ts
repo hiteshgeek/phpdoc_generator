@@ -13,4 +13,5 @@ export interface DocblockInfo {
   lines?: string[];
   settings?: string[];
   otherTags?: string[];
+  preservedTags?: string[];
 }

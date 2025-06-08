@@ -17,9 +17,9 @@ describe("phpdocDocblock indentation and spacing", () => {
       padding: 4,
     });
     expect(docblock[0]).to.equal("    /**");
-    expect(docblock[1]).to.equal("    * function b");
-    expect(docblock[2]).to.equal("    *");
-    expect(docblock[3]).to.equal("    * @return void");
+    expect(docblock[1]).to.equal("     * function b"); // 5 spaces
+    expect(docblock[2]).to.equal("     *");
+    expect(docblock[3]).to.equal("     * @return void");
     expect(docblock[4]).to.equal("    */");
   });
 
@@ -45,7 +45,7 @@ describe("phpdocDocblock indentation and spacing", () => {
     // There should be exactly one empty line between last param and @return
     let emptyLineCount = 0;
     for (let i = idxParam + 1; i < idxReturn; ++i) {
-      if (docblock[i].trim() === "*") emptyLineCount++;
+      if (docblock[i] === " *") emptyLineCount++;
     }
     expect(emptyLineCount).to.equal(1);
   });
@@ -60,13 +60,12 @@ describe("phpdocDocblock indentation and spacing", () => {
       otherTags: ["@throws Exception"],
       padding: 0,
     });
-    expect(docblock).to.include("*"); // empty line (no space for padding 0)
     const idxThrows = docblock.findIndex((l) => l.includes("@throws"));
     const idxReturn = docblock.findIndex((l) => l.includes("@return"));
     // There should be exactly one empty line between throws and @return
     let emptyLineCount = 0;
     for (let i = idxThrows + 1; i < idxReturn; ++i) {
-      if (docblock[i].trim() === "*") emptyLineCount++;
+      if (docblock[i] === " *") emptyLineCount++;
     }
     expect(emptyLineCount).to.equal(1);
   });

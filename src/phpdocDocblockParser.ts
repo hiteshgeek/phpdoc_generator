@@ -8,6 +8,7 @@ export function parseDocblock(lines: string[]): DocblockInfo {
   let inDesc = true;
   let settings: string[] | undefined = undefined;
   let otherTags: string[] = [];
+  let preservedTags: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.trim().startsWith("/**")) continue; // skip opening line
@@ -45,8 +46,11 @@ export function parseDocblock(lines: string[]): DocblockInfo {
       !l.startsWith("@settings")
     ) {
       otherTags.push(l);
+      preservedTags.push(line); // preserve original whitespace
     } else if (inDesc && l && !l.startsWith("@")) {
       summaryLines.push(l.trim());
+    } else if (l.trim() === "" || (!l.startsWith("@") && !inDesc)) {
+      preservedTags.push(line); // preserve blank lines and unknown tags
     }
   }
   return {
@@ -57,5 +61,6 @@ export function parseDocblock(lines: string[]): DocblockInfo {
     lines,
     settings,
     otherTags,
+    preservedTags,
   };
 }
