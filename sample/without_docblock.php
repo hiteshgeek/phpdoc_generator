@@ -15,6 +15,14 @@ function a()
     function d() {}
 }
 
+/**
+ * function add
+ *
+ * @param float $a
+ * @param float $b
+ *
+ * @return bool|array|string|Company
+ */
 function add(float $a, float $b)
 {
     if ($a) {
@@ -30,12 +38,13 @@ function add(float $a, float $b)
 
 /**
  * function multiple_return_example
+ * this is an example function that demonstrates multiple return types
  *
  * @param array $data
  * @param mixed $userId
  * @param bool $isTest
  *
- * @return void
+ * @return string|int|array
  */
 function multiple_return_example(array $data, int|string $userId, bool $isTest): string|int|array
 {
@@ -91,6 +100,11 @@ trait LogsActivity {}
 
 function sync(): void {}
 
+/**
+ * function getSettings
+ *
+ * @return array
+ */
 function getSettings(): array
 {
     return [

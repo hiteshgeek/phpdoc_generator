@@ -244,6 +244,7 @@ export async function generatePHPDocForProject() {
           }
           if (!line.startsWith("*") && !line.startsWith("//")) break;
           docStart--;
+          docEnd--;
         }
         if (hasDoc) {
           docEnd = docStart;
@@ -459,6 +460,7 @@ function findBlockForCursor(
         }
         if (!docLine.startsWith("*") && !docLine.startsWith("//")) break;
         docStart--;
+        docEnd--;
       }
       if (foundDoc && line >= docStart && line <= docEnd) {
         return block;
@@ -488,172 +490,45 @@ async function generateDocblocksRecursive({
   skipSettings?: boolean;
   recurse?: boolean;
 }) {
-  // Get indentation for the block's own start line
-  const lineText = document.lineAt(block.startLine).text;
-  const padding = lineText.match(/^\s*/)?.[0] ?? "";
-  // Find settings in function body (search for getSettings("Setting Name"))
-  let settings: string[] | undefined = undefined;
-  let throwsTypes: string[] = [];
-  if (block.type === "function") {
+  const lines = document.getText().split("\n");
+  const padding = lines[block.startLine].match(/^[\s]*/)?.[0] ?? "";
+
+  // --- Return Type Inference if not explicitly provided ---
+  let returnType = block.returnType;
+  if (block.type === "function" && (!returnType || returnType === "void")) {
+    // Try to infer from return statements in the function body
     const funcStart = document.lineAt(block.startLine).range.start;
     const funcEnd = document.lineAt(block.endLine).range.end;
     const funcText = document.getText(new vscode.Range(funcStart, funcEnd));
-    const uncommented = funcText
-      .replace(/\/\*.*?\*\//gs, "")
-      .split("\n")
-      .filter((line) => !line.trim().startsWith("//"))
-      .join("\n");
-    // Settings
-    const settingsMatches = [
-      ...uncommented.matchAll(/getSettings\(["'](.+?)["']\)/g),
-    ];
-    if (settingsMatches.length > 0) {
-      settings = Array.from(new Set(settingsMatches.map((m) => m[1])));
-    }
-    // Throws: find all throw new ExceptionType (ignore commented lines)
-    const throwMatches = [...uncommented.matchAll(/throw\s+new\s+([\w\\]+)/g)];
-    throwsTypes = Array.from(
-      new Set(throwMatches.map((m: RegExpMatchArray) => m[1]))
+    const returnMatches = [...funcText.matchAll(/return\s+([^;]+);/g)].map(
+      (m) => m[1].trim()
     );
-    // --- Robust return type inference using AST (ignore nested functions/closures, union all top-level returns) ---
-    const text = document.getText();
-    const PHPParser = require("php-parser");
-    const parser = new PHPParser.Engine({
-      parser: { extractDoc: true },
-      ast: { withPositions: true },
-    });
-    const ast = parser.parseCode(text, "");
-    let targetNode: any = null;
-    function findNode(node: any) {
-      if (!node || typeof node !== "object") return;
-      if (
-        (node.kind === "function" || node.kind === "method") &&
-        node.loc &&
-        node.loc.start.line - 1 === block.startLine &&
-        node.loc.end.line - 1 === block.endLine
-      ) {
-        targetNode = node;
-      }
-      for (const key in node) {
-        if (node.hasOwnProperty(key)) {
-          const child = node[key];
-          if (Array.isArray(child)) child.forEach(findNode);
-          else if (typeof child === "object" && child && child.kind)
-            findNode(child);
-        }
-      }
-    }
-    findNode(ast);
-    if (targetNode) {
-      // Use declared return type if present and ignore inferred types if explicitly declared
-      let declaredType = targetNode.type
-        ? typeof targetNode.type === "string"
-          ? targetNode.type
-          : targetNode.type.name || targetNode.type.raw || targetNode.type
-        : undefined;
-      // If the block has an explicit return type, use only that
-      let useOnlyDeclared = (block as any).hasExplicitReturnType;
-      let inferredTypes: string[] = [];
-      if (!useOnlyDeclared) {
-        inferredTypes =
-          collectReturnTypesFromFunctionNode(targetNode).filter(Boolean);
-      }
-      let uniqueTypes: string[] = useOnlyDeclared
-        ? declaredType
-          ? (() => {
-              let declaredTypeStr = "";
-              if (typeof declaredType === "string") {
-                declaredTypeStr = declaredType;
-              } else if (declaredType !== undefined && declaredType !== null) {
-                try {
-                  declaredTypeStr = String(declaredType);
-                } catch (e) {
-                  declaredTypeStr = "";
-                  console.warn(
-                    "[PHPDocGen] [WARN] Could not convert declaredType to string:",
-                    e
-                  );
-                }
-              }
-              return declaredTypeStr
-                .split("|")
-                .map((s: string) => s.trim())
-                .filter((s: string) => !!s);
-            })()
-          : []
-        : Array.from(new Set(inferredTypes));
-      // Remove 'void' if other types exist
-      if (uniqueTypes.length > 1)
-        uniqueTypes = uniqueTypes.filter((t: string) => t !== "void");
-      // Remove any Exception/Throwable types unless they are actually returned (not just thrown)
-      uniqueTypes = uniqueTypes.filter((t: string) => {
-        if (/Exception$|Error$|Throwable$/.test(t)) {
-          return (
-            inferredTypes &&
-            inferredTypes.includes(t) &&
-            ![
-              "Exception",
-              "Error",
-              "Throwable",
-              "ArithmeticError",
-              "DateMalformedStringException",
-            ].includes(t)
-          );
-        }
-        return true;
-      });
-      // If declared type exists, merge with inferred types (union) unless explicit
-      let unionType = "";
-      if (declaredType) {
-        if (useOnlyDeclared) {
-          unionType = uniqueTypes.sort().join("|");
-        } else {
-          let declaredTypeStr = "";
-          if (typeof declaredType === "string") {
-            declaredTypeStr = declaredType;
-          } else if (declaredType !== undefined && declaredType !== null) {
-            try {
-              declaredTypeStr = String(declaredType);
-            } catch (e) {
-              declaredTypeStr = "";
-              console.warn(
-                "[PHPDocGen] [WARN] Could not convert declaredType to string:",
-                e
-              );
-            }
-          }
-          const declaredTypesArr = declaredTypeStr
-            .split("|")
-            .map((s: string) => s.trim())
-            .filter((s: string) => !!s);
-          const allTypes = Array.from(
-            new Set([...declaredTypesArr, ...uniqueTypes])
-          );
-          unionType = allTypes.sort().join("|");
-        }
-      } else {
-        unionType = uniqueTypes.sort().join("|");
-      }
-      // Never allow [object Object] or empty string
-      if (!unionType || unionType === "[object Object]") {
-        unionType = "void";
-      }
-      block.returnType = unionType || "void";
-      // --- PATCH: If block.returnType is still empty or invalid, force to 'void' ---
-      if (!block.returnType || block.returnType === "[object Object]") {
-        block.returnType = "void";
-      }
+    if (returnMatches.length === 0) {
+      returnType = "void";
     } else {
-      // --- PATCH: If no targetNode found, ensure block.returnType is at least 'void' ---
-      if (!block.returnType || block.returnType === "[object Object]") {
-        block.returnType = "void";
+      const types = new Set();
+      for (const ret of returnMatches) {
+        if (/^\[.*\]$/.test(ret)) types.add("array");
+        else if (/^true|false$/.test(ret)) types.add("bool");
+        else if (/^-?\d+\.\d+$/.test(ret)) types.add("float");
+        else if (/^-?\d+$/.test(ret)) types.add("int");
+        else if (/^".*"|'.*'$/.test(ret)) types.add("string");
+        else {
+          const newClassMatch = ret.match(/^new\s+([A-Za-z_][A-Za-z0-9_]*)/);
+          if (newClassMatch) types.add(newClassMatch[1]);
+          else types.add("mixed");
+        }
       }
+      returnType = types.size > 0 ? Array.from(types).join("|") : "mixed";
     }
+    block.returnType = returnType; // <-- always set on block
   }
-  // Check for existing docblock
+
+  // --- Docblock region detection ---
   let docStart = block.startLine - 1;
   let hasDoc = false;
   let docEnd = docStart;
+  // Scan upwards to find the start of the docblock (/**)
   while (docStart >= 0) {
     const line = document.lineAt(docStart).text.trim();
     if (line === "") {
@@ -667,7 +542,9 @@ async function generateDocblocksRecursive({
     }
     if (!line.startsWith("*") && !line.startsWith("//")) break;
     docStart--;
+    docEnd--;
   }
+  // If found, scan downwards to find the end of the docblock (*/)
   if (hasDoc) {
     docEnd = docStart;
     while (docEnd < block.startLine) {
@@ -675,120 +552,115 @@ async function generateDocblocksRecursive({
       docEnd++;
     }
   }
-  if (!hasDoc) {
-    const throwsTags = throwsTypes.map((t: string) => `@throws ${t}`);
-    const docblock = buildDocblock({
-      summary: "",
-      params: block.params || [],
-      returnType: block.returnType,
-      lines: [],
-      name: block.name,
-      settings: skipSettings
-        ? undefined
-        : settings?.map((s: string) => {
-            if (
-              !settingsDescriptions ||
-              Object.keys(settingsDescriptions).length === 0
-            )
-              return s;
-            const desc = settingsDescriptions[s];
-            if (desc && desc.trim() && desc.trim() !== s) {
-              return `${s} : ${desc}`;
-            } else if (desc && desc.trim()) {
-              return `${s} : ${desc}`;
-            } else {
-              return `${s}`;
-            }
-          }),
-      type: block.type,
-      otherTags: throwsTags,
-      padding: padding,
-    });
-    editBuilder.insert(
-      new vscode.Position(block.startLine, 0),
-      docblock.join("\n") + "\n"
-    );
-  } else {
-    const throwsTags = throwsTypes.map((t: string) => `@throws ${t}`);
+
+  // Parse existing docblock if present
+  let parsedDocblock: any = { params: [], otherTags: [] };
+  if (hasDoc) {
     const docRange = new vscode.Range(
       new vscode.Position(docStart, 0),
       new vscode.Position(docEnd, document.lineAt(docEnd).text.length)
     );
-    const oldDocLines = document.getText(docRange).split("\n");
-    const oldDoc = parseDocblock(oldDocLines);
-    const existingThrows = (oldDoc.otherTags || []).filter((tag: string) =>
-      tag.trim().startsWith("@throws")
-    );
-    const filteredThrows = existingThrows.filter((tag: string) =>
-      throwsTypes.includes(tag.replace(/^@throws\s+/, "").trim())
-    );
-    const existingTypes = new Set(
-      filteredThrows.map((tag: string) => tag.replace(/^@throws\s+/, "").trim())
-    );
-    const newThrows = throwsTypes
-      .filter((t: string) => !existingTypes.has(t))
-      .map((t: string) => `@throws ${t}`);
-    const allThrows = [...filteredThrows, ...newThrows];
-    const updated = {
-      ...updateDocblock(oldDoc, block.params || [], block.returnType),
-      name: block.name,
-      settings: settings?.map((s: string) =>
-        settingsDescriptions[s] ? `${s} : ${settingsDescriptions[s]}` : s
-      ),
-      type: block.type,
-      otherTags: allThrows,
-      lines: [],
-      preservedTags: oldDoc.preservedTags, // <-- ensure preservedTags are passed
-    };
-    const newDoc = buildDocblock({ ...updated, padding });
-    editBuilder.replace(docRange, newDoc.join("\n"));
+    const docLines = document.getText(docRange).split("\n");
+    parsedDocblock = parseDocblock(docLines);
   }
-  // After handling class docblock, add @var docblocks for each property (fix: use correct padding for each property)
-  if (block.type === "class" && block.children && block.children.length > 0) {
-    for (const child of block.children) {
-      if (child.type === "property" && child.name) {
-        const propLine = child.startLine;
-        const propType = child.returnType || "mixed";
-        // Use the property's own indentation (fix for test, no extra space)
-        const propPadding =
-          document.lineAt(propLine).text.match(/^\s*/)?.[0] ?? "";
-        const propDoc = [
-          propPadding + "/**",
-          propPadding + ` * @var ${propType} Property description`,
-          propPadding + "*/",
-        ];
-        // Check if a docblock already exists above the property (skip whitespace)
-        let hasDoc = false;
-        let checkLine = propLine - 1;
-        while (checkLine >= 0) {
-          const prevLineText = document.lineAt(checkLine).text.trim();
-          if (prevLineText === "") {
-            checkLine--;
-            continue;
-          }
-          if (prevLineText.startsWith("/**")) {
-            hasDoc = true;
-          }
-          break;
-        }
-        if (!hasDoc) {
-          editBuilder.insert(
-            new vscode.Position(propLine, 0),
-            "\n" + propDoc.join("\n") + "\n"
-          );
-        }
+  let updatedDocblock = { ...parsedDocblock };
+
+  // --- Update name ---
+  (updatedDocblock as any).name = block.name;
+
+  // --- Update type ---
+  (updatedDocblock as any).type = block.type;
+
+  // --- Update settings ---
+  if (!skipSettings && block.type === "function" && (block as any).settings) {
+    const settingsTags = (block as any).settings.map((s: string) => {
+      const desc = settingsDescriptions[s];
+      if (desc && desc.trim() && desc.trim() !== s) {
+        return `${s} : ${desc}`;
+      } else if (desc && desc.trim()) {
+        return `${s} : ${desc}`;
+      } else {
+        return `${s}`;
       }
-    }
+    });
+    (updatedDocblock as any).settings = settingsTags;
   }
-  // Only show notification for the main block if not recursing (single-block mode)
-  if (!recurse) {
-    // vscode.window.showInformationMessage(
-    //   `[PHPDoc Generator] Docblock generated/updated for '${block.name}' (${
-    //     block.type
-    //   }) at line ${block.startLine + 1}.`
-    // );
+
+  // --- Update return type ---
+  updatedDocblock.returnType = returnType || "mixed";
+
+  // --- Update params ---
+  if (block.params) {
+    const newParams = block.params.map((param) => {
+      const paramName = param.name;
+      const paramType = param.type;
+      const paramDesc = (param as any).desc;
+      // Check if the parameter already exists in the docblock
+      const existingParam = parsedDocblock.params?.find(
+        (p: any) => p.name === paramName
+      );
+      if (existingParam) {
+        // Update existing parameter
+        return {
+          ...existingParam,
+          type: paramType || existingParam.type,
+          desc: paramDesc || (existingParam as any).desc,
+        };
+      } else {
+        // New parameter
+        return {
+          name: paramName,
+          type: paramType,
+          desc: paramDesc,
+        };
+      }
+    });
+    updatedDocblock.params = newParams;
   }
-  // Always recurse into children
+
+  // --- Update other tags (e.g., @throws) ---
+  if (parsedDocblock.otherTags) {
+    updatedDocblock.otherTags = parsedDocblock.otherTags.filter(
+      (tag: string) => !tag.trim().startsWith("@throws")
+    );
+  }
+  // If you want to add throws tags, you must collect them above and add here
+  // (no block.throws property exists on PHPBlock)
+  if (
+    (block as any)._inferredThrows &&
+    Array.isArray((block as any)._inferredThrows) &&
+    (block as any)._inferredThrows.length > 0
+  ) {
+    const throwsTags = (block as any)._inferredThrows.map(
+      (t: string) => `@throws ${t}`
+    );
+    if (!updatedDocblock.otherTags) updatedDocblock.otherTags = [];
+    updatedDocblock.otherTags.push(...throwsTags);
+  }
+
+  // Build new docblock lines
+  const newDocblockLines = buildDocblock({
+    ...updatedDocblock,
+    padding,
+  });
+
+  // Replace or insert docblock
+  if (hasDoc) {
+    // Replace only the docblock region
+    const docRange = new vscode.Range(
+      new vscode.Position(docStart, 0),
+      new vscode.Position(docEnd, document.lineAt(docEnd).text.length)
+    );
+    editBuilder.replace(docRange, newDocblockLines.join("\n"));
+  } else {
+    // Insert new docblock immediately above the function
+    editBuilder.insert(
+      new vscode.Position(block.startLine, 0),
+      newDocblockLines.join("\n") + "\n"
+    );
+  }
+
+  // Recursively process child blocks (for classes/interfaces)
   if (recurse && block.children && block.children.length > 0) {
     for (const child of block.children) {
       await generateDocblocksRecursive({
@@ -797,7 +669,7 @@ async function generateDocblocksRecursive({
         block: child,
         settingsDescriptions,
         skipSettings,
-        recurse: true,
+        recurse,
       });
     }
   }

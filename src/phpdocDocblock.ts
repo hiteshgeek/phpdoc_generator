@@ -21,20 +21,29 @@ export function buildDocblock({
   params,
   returnType,
   returnDesc,
+  lines,
   name,
   settings,
   type,
   otherTags = [],
-  preservedTags = [],
+  preservedTags = [], // <-- Added default for preservedTags
   padding = 0,
 }: DocblockInfo & {
   name?: string;
   settings?: string[];
   type?: string;
   otherTags?: string[];
-  preservedTags?: string[];
-  padding?: number | string;
+  preservedTags?: string[]; // <-- Added type for preservedTags
+  padding?: number | string; // Accept string for whitespace
 }): string[] {
+  // DEBUG: Log the name and returnType used for docblock
+  if (name) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[phpdocDocblock] buildDocblock for '${name}', returnType='${returnType}'`
+    );
+  }
+
   const pad =
     typeof padding === "string"
       ? padding
@@ -201,15 +210,18 @@ export function buildDocblock({
 
   // 7. Return
   const returnGroup: string[] = [];
-  if (type === "function" && returnType !== undefined) {
-    // Don't convert 'mixed' to 'void' - that was causing issues with union types
-    // "mixed" is a valid PHP type and should be preserved
-    const returnLine = `@return ${returnType}${
+  if (type === "function" || type === "method" || typeof type === "undefined") {
+    let effectiveReturnType = returnType;
+    if (
+      typeof effectiveReturnType !== "string" ||
+      effectiveReturnType.trim() === ""
+    ) {
+      effectiveReturnType = "mixed";
+    }
+    const returnLine = `@return ${effectiveReturnType}${
       returnDesc ? " " + returnDesc : ""
     }`;
     if (filterNoClosing(returnLine)) returnGroup.push(pad + " * " + returnLine);
-  } else if (type === "function") {
-    returnGroup.push(pad + " * @return void");
   }
 
   // --- Group docblock sections in canonical order ---
@@ -287,17 +299,15 @@ export function updateDocblock(
     const found = old.params.find((p) => p.name === bp.name);
     return found ? { ...bp, desc: found.desc } : { ...bp };
   });
-
-  // If the old docblock had a return description and we're updating the type,
-  // make sure to preserve the description text
+  // Always set returnType to 'mixed' if falsy
+  const safeReturnType = returnType && returnType.trim() ? returnType : "mixed";
   return {
     summary: old.summary,
     params,
-    returnType,
-    returnDesc: old.returnDesc || "", // Default to empty string to avoid undefined
+    returnType: safeReturnType,
+    returnDesc: old.returnDesc,
     settings: old.settings,
     otherTags: old.otherTags,
-    preservedTags: old.preservedTags || [], // Make sure we preserve other tags too
   };
 }
 
