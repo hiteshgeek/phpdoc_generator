@@ -179,6 +179,22 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
           level
         );
         break;
+      case "property": {
+        // node.name can be an array (multiple properties declared in one line)
+        const propNames = Array.isArray(node.name) ? node.name : [node.name];
+        for (const prop of propNames) {
+          addBlock(
+            "property",
+            typeof prop === "string" ? prop : prop?.name,
+            prop.loc || node.loc,
+            undefined,
+            node.type ? node.type.name || node.type : undefined,
+            parentBlock,
+            level
+          );
+        }
+        break;
+      }
     }
     for (const key in node) {
       if (node.hasOwnProperty(key)) {

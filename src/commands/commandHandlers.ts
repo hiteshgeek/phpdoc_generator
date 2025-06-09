@@ -778,37 +778,68 @@ async function generateDocblocksRecursive({
             hasPropDoc = true;
             break;
           }
-          if (!line.startsWith("*") && !line.startsWith("//")) break;
+          // Stop at any non-docblock/comment line
+          if (
+            !line.startsWith("*") &&
+            !line.startsWith("//") &&
+            !line.startsWith("#")
+          )
+            break;
           propDocStart--;
         }
+        // Always update the docblock (replace if present, insert if not)
+        const propPadding = lines[child.startLine].match(/^[\s]*/)?.[0] ?? "";
+        // Build docblock with property name as summary and correct type
+        const propDocblock = buildPropertyDocblock({
+          name: child.name,
+          type: child.returnType,
+          padding: propPadding,
+        });
+        // Do NOT insert summary/property name line for properties (PHPDoc standard)
+        let docblockLines = [...propDocblock];
+        // Ensure @var line is correct
+        const varLineIdx = docblockLines.findIndex((l) => l.includes("@var "));
+        if (varLineIdx !== -1) {
+          docblockLines[varLineIdx] = `${propPadding} * @var ${
+            child.returnType || "mixed"
+          }`;
+        }
+        // Remove extra blank lines at start/end
+        while (docblockLines.length > 0 && docblockLines[0].trim() === "")
+          docblockLines.shift();
+        while (
+          docblockLines.length > 0 &&
+          docblockLines[docblockLines.length - 1].trim() === ""
+        )
+          docblockLines.pop();
+        // Always ensure a single blank line before the docblock
+        let insertText = docblockLines.join("\n") + "\n";
+        let insertPos = new vscode.Position(child.startLine, 0);
         if (!hasPropDoc) {
-          // Insert property docblock above the property
-          const propPadding = lines[child.startLine].match(/^[\s]*/)?.[0] ?? "";
-          const propDocblock = buildPropertyDocblock({
-            name: child.name,
-            type: child.returnType,
-            padding: propPadding,
-          });
-          editBuilder.insert(
-            new vscode.Position(child.startLine, 0),
-            propDocblock.join("\n") + "\n"
+          // Only insert a blank line if the previous line is not already blank
+          const prevLineIdx = child.startLine - 1;
+          const prevLineIsBlank =
+            prevLineIdx >= 0 && lines[prevLineIdx].trim() === "";
+          insertText = (prevLineIsBlank ? "" : "\n") + insertText;
+        }
+        if (hasPropDoc) {
+          // Find the end of the existing docblock
+          let propDocEnd = propDocStart;
+          while (propDocEnd < child.startLine) {
+            if (document.lineAt(propDocEnd).text.includes("*/")) break;
+            propDocEnd++;
+          }
+          // Replace the existing docblock, no extra blank lines
+          const docRange = new vscode.Range(
+            new vscode.Position(propDocStart, 0),
+            new vscode.Position(propDocEnd + 1, 0)
           );
+          editBuilder.replace(docRange, insertText);
+        } else {
+          // Insert new docblock with correct blank line handling
+          editBuilder.insert(insertPos, insertText);
         }
       }
-    }
-  }
-
-  // Recursively process child blocks (for classes/interfaces)
-  if (recurse && block.children && block.children.length > 0) {
-    for (const child of block.children) {
-      await generateDocblocksRecursive({
-        document,
-        editBuilder,
-        block: child,
-        settingsDescriptions,
-        skipSettings,
-        recurse,
-      });
     }
   }
 }
