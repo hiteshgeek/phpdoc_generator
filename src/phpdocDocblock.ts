@@ -321,14 +321,19 @@ export function buildPropertyDocblock({
   type?: string;
   padding?: number | string;
 }): string[] {
+  // Always generate a minimal PHPDoc property docblock:
+  //   /**
+  //    * @var type
+  //    */
+  // No summary, no property name, no extra blank lines.
+  // This is enforced here and must not be changed for PHPDoc compliance.
   const pad =
     typeof padding === "string"
       ? padding
       : padding > 0
       ? " ".repeat(padding)
       : "";
-  // Use the provided type or default to 'mixed'
   const docType = type && type.trim() !== "" ? type : "mixed";
-  const lines = [pad + "/**", pad + ` * @var ${docType}`, pad + " */"];
-  return lines;
+  // Only a single @var tag, no summary or property name line
+  return [pad + "/**", pad + ` * @var ${docType}`, pad + " */"];
 }

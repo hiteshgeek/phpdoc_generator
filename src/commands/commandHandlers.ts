@@ -463,7 +463,17 @@ function findBlockForCursor(
     }
   }
   search(blocks);
-  if (found) return found;
+  if (found) {
+    // If the found block is a property, return its parent class instead
+    if (
+      found.type === "property" &&
+      found.parent &&
+      found.parent.type === "class"
+    ) {
+      return found.parent;
+    }
+    return found;
+  }
 
   // --- Enhanced: If cursor is in docblock above a block, return that block ---
   // Scan upwards from cursor to find docblock start
@@ -765,81 +775,145 @@ async function generateDocblocksRecursive({
   if (block.type === "class" && block.children && block.children.length > 0) {
     for (const child of block.children) {
       if (child.type === "property") {
-        // Check if a docblock already exists above the property
-        let propDocStart = child.startLine - 1;
-        let hasPropDoc = false;
-        while (propDocStart >= 0) {
-          const line = document.lineAt(propDocStart).text.trim();
-          if (line === "") {
-            propDocStart--;
-            continue;
-          }
-          if (line.startsWith("/**")) {
-            hasPropDoc = true;
-            break;
-          }
-          // Stop at any non-docblock/comment line
-          if (
-            !line.startsWith("*") &&
-            !line.startsWith("//") &&
-            !line.startsWith("#")
-          )
-            break;
-          propDocStart--;
-        }
-        // Always update the docblock (replace if present, insert if not)
-        const propPadding = lines[child.startLine].match(/^[\s]*/)?.[0] ?? "";
-        // Build docblock with property name as summary and correct type
-        const propDocblock = buildPropertyDocblock({
-          name: child.name,
-          type: child.returnType,
-          padding: propPadding,
+        generateOrReplacePropertyDocblock({
+          document,
+          editBuilder,
+          block: child,
+          lines,
         });
-        // Do NOT insert summary/property name line for properties (PHPDoc standard)
-        let docblockLines = [...propDocblock];
-        // Ensure @var line is correct
-        const varLineIdx = docblockLines.findIndex((l) => l.includes("@var "));
-        if (varLineIdx !== -1) {
-          docblockLines[varLineIdx] = `${propPadding} * @var ${
-            child.returnType || "mixed"
-          }`;
-        }
-        // Remove extra blank lines at start/end
-        while (docblockLines.length > 0 && docblockLines[0].trim() === "")
-          docblockLines.shift();
-        while (
-          docblockLines.length > 0 &&
-          docblockLines[docblockLines.length - 1].trim() === ""
-        )
-          docblockLines.pop();
-        // Always ensure a single blank line before the docblock
-        let insertText = docblockLines.join("\n") + "\n";
-        let insertPos = new vscode.Position(child.startLine, 0);
-        if (!hasPropDoc) {
-          // Only insert a blank line if the previous line is not already blank
-          const prevLineIdx = child.startLine - 1;
-          const prevLineIsBlank =
-            prevLineIdx >= 0 && lines[prevLineIdx].trim() === "";
-          insertText = (prevLineIsBlank ? "" : "\n") + insertText;
-        }
-        if (hasPropDoc) {
-          // Find the end of the existing docblock
-          let propDocEnd = propDocStart;
-          while (propDocEnd < child.startLine) {
-            if (document.lineAt(propDocEnd).text.includes("*/")) break;
-            propDocEnd++;
-          }
-          // Replace the existing docblock, no extra blank lines
-          const docRange = new vscode.Range(
-            new vscode.Position(propDocStart, 0),
-            new vscode.Position(propDocEnd + 1, 0)
-          );
-          editBuilder.replace(docRange, insertText);
-        } else {
-          // Insert new docblock with correct blank line handling
-          editBuilder.insert(insertPos, insertText);
-        }
       }
     }
+  }
+}
+
+// --- Helper: Generate and insert/replace property docblock above a property block ---
+function generateOrReplacePropertyDocblock({
+  document,
+  editBuilder,
+  block,
+  lines,
+}: {
+  document: vscode.TextDocument;
+  editBuilder: vscode.TextEditorEdit;
+  block: PHPBlock;
+  lines: string[];
+}) {
+  // Scan upwards to find the top of all consecutive docblocks/comments above the property
+  let propDocStart = block.startLine - 1;
+  let topDocStart = propDocStart;
+  let foundAnyDoc = false;
+  while (topDocStart >= 0) {
+    const line = document.lineAt(topDocStart).text.trim();
+    if (line === "") {
+      topDocStart--;
+      continue;
+    }
+    if (line.startsWith("/*")) {
+      foundAnyDoc = true;
+      let commentBlockStart = topDocStart;
+      while (commentBlockStart > 0) {
+        const prevLine = document.lineAt(commentBlockStart - 1).text.trim();
+        if (prevLine.startsWith("/*")) {
+          commentBlockStart--;
+        } else {
+          break;
+        }
+      }
+      topDocStart = commentBlockStart;
+      break;
+    }
+    if (line.startsWith("/**")) {
+      foundAnyDoc = true;
+      let docblockStart = topDocStart;
+      while (docblockStart > 0) {
+        const prevLine = document.lineAt(docblockStart - 1).text.trim();
+        if (prevLine.startsWith("/**")) {
+          docblockStart--;
+        } else {
+          break;
+        }
+      }
+      topDocStart = docblockStart;
+      break;
+    }
+    if (
+      !line.startsWith("*") &&
+      !line.startsWith("//") &&
+      !line.startsWith("#")
+    ) {
+      break;
+    }
+    topDocStart--;
+  }
+  // Now scan down from topDocStart to just before the property line to find the end of the last docblock/comment
+  let docEnd = topDocStart;
+  while (docEnd < block.startLine) {
+    const line = document.lineAt(docEnd).text;
+    if (line.includes("*/")) {
+      docEnd++;
+      continue;
+    }
+    if (line.trim() === "") {
+      docEnd++;
+      continue;
+    }
+    const trimmed = line.trim();
+    if (
+      !trimmed.startsWith("*") &&
+      !trimmed.startsWith("//") &&
+      !trimmed.startsWith("#") &&
+      !trimmed.startsWith("/*") &&
+      !trimmed.startsWith("/**")
+    ) {
+      break;
+    }
+    docEnd++;
+  }
+  const propPadding = lines[block.startLine].match(/^[\s]*/)?.[0] ?? "";
+  const propDocblock = buildPropertyDocblock({
+    name: block.name,
+    type: block.returnType,
+    padding: propPadding,
+  });
+  let docblockLines = [...propDocblock];
+  // Remove any summary/property name line (should only be @var)
+  docblockLines = docblockLines.filter(
+    (l) =>
+      l.includes("@var ") ||
+      l.trim() === "/**" ||
+      l.trim() === "*/" ||
+      l.trim().startsWith("* @var")
+  );
+  const varLineIdx = docblockLines.findIndex((l) => l.includes("@var "));
+  if (varLineIdx !== -1) {
+    docblockLines[varLineIdx] = `${propPadding} * @var ${
+      block.returnType || "mixed"
+    }`;
+  }
+  while (docblockLines.length > 0 && docblockLines[0].trim() === "")
+    docblockLines.shift();
+  while (
+    docblockLines.length > 0 &&
+    docblockLines[docblockLines.length - 1].trim() === ""
+  )
+    docblockLines.pop();
+  let insertText = docblockLines.join("\n") + "\n";
+  // Do NOT add a blank line after the docblock
+  if (foundAnyDoc && topDocStart < block.startLine) {
+    // Replace the entire region from topDocStart to block.startLine
+    const docRange = new vscode.Range(
+      new vscode.Position(topDocStart, 0),
+      new vscode.Position(block.startLine, 0)
+    );
+    editBuilder.replace(docRange, insertText);
+  } else {
+    // No docblock found, just insert above property
+    editBuilder.insert(new vscode.Position(block.startLine, 0), insertText);
+  }
+  // Ensure a blank line after the property line
+  const propertyLineIdx = block.startLine;
+  const nextLineIdx = propertyLineIdx + 1;
+  if (nextLineIdx >= lines.length || lines[nextLineIdx].trim() !== "") {
+    editBuilder.insert(new vscode.Position(propertyLineIdx + 1, 0), "\n");
   }
 }

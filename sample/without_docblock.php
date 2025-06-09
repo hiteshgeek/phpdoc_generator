@@ -18,9 +18,17 @@ function a()
     function d() {}
 }
 
+/**
+ * function add
+ *
+ * @param float $a
+ * @param float $b
+ *
+ * @return mixed
+ */
 function add(float $a, float $b)
 {
-    return $a + $b;
+    return intval($a + $b);
 }
 
 class OrderProcessor
