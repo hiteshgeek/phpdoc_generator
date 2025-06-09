@@ -612,7 +612,12 @@ async function generateDocblocksRecursive({
 
   // --- Settings Inference ---
   let settings: string[] | undefined = undefined;
-  if (block.type === "function" && !skipSettings) {
+  // Only search for settings if not skipping and DB config is complete
+  if (
+    block.type === "function" &&
+    !skipSettings &&
+    isDBConfigComplete(getDBConfigFromVSCode())
+  ) {
     const funcStart = document.lineAt(block.startLine).range.start;
     const funcEnd = document.lineAt(block.endLine).range.end;
     const funcText = document.getText(new vscode.Range(funcStart, funcEnd));
@@ -632,13 +637,14 @@ async function generateDocblocksRecursive({
   // --- Docblock Generation ---
   let docblock: string[] = [];
   if (block.type === "function") {
-    docblock = buildDocblock({
-      summary: "",
-      params: block.params || [],
-      returnType: returnType,
-      lines: [],
-      name: block.name,
-      settings: settings?.map((s: string) => {
+    // Only include settings if DB config is complete and settings is defined
+    let docblockSettings: string[] | undefined = undefined;
+    if (
+      settings &&
+      settings.length > 0 &&
+      isDBConfigComplete(getDBConfigFromVSCode())
+    ) {
+      docblockSettings = settings.map((s: string) => {
         const desc = settingsDescriptions[s];
         if (desc && desc.trim() && desc.trim() !== s) {
           return `${s} : ${desc}`;
@@ -647,7 +653,15 @@ async function generateDocblocksRecursive({
         } else {
           return `${s}`;
         }
-      }),
+      });
+    }
+    docblock = buildDocblock({
+      summary: "",
+      params: block.params || [],
+      returnType: returnType,
+      lines: [],
+      name: block.name,
+      settings: docblockSettings,
       type: block.type,
       otherTags: [],
       padding: padding,

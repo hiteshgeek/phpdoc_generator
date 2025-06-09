@@ -2,7 +2,7 @@
   "name": "phpdoc-generator-hiteshgeek",
   "displayName": "PHPDoc Generator (hiteshgeek)",
   "description": "Intelligently generates and updates PHPDoc blocks for PHP code. Supports command palette, keyboard shortcut, and preserves user docblock content.",
-  "version": "0.0.3",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.100.0"
   },

@@ -33,9 +33,16 @@ function a()
  * @param string $b
  *
  * @return int
+ *
+ * @settings
+ * - test1
+ * - test
  */
 function add(float $a, string $b)
 {
+    getSettings("test1");
+    getSettings("test");
+
     // return $a + $b;
     return intval($a + $b);
     // return floatval($a + $b);
@@ -51,6 +58,7 @@ class OrderProcessor
      * @var int
      */
     private int $orderId;
+
     /**
      * @var int
      */

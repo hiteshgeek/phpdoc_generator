@@ -1,10 +1,12 @@
 # Change Log
 
-## [Unreleased]
+## [0.0.4] - 2025-06-10
 
 ### Added
 
 - **PHP 8 Union Return Type Support**: Improved handling of union return types in function signatures (e.g., `function example(): int|string|bool`). The extension now correctly extracts, parses, and generates docblocks for functions with union return types.
+- **Class and Property Docblock Generation:** The extension can now generate docblocks for classes and all class properties, not just functions. Property docblocks use `@var {type}` and follow correct spacing and indentation rules.
+- **Return Type Inference from Type Casting:** The extension now infers return types from explicit type casting expressions (e.g., `(int)`, `(string)`, etc.) in return statements, improving the accuracy of generated `@return` tags.
 - **Union Type Docblock Updates**: The docblock generator now correctly updates existing docblocks when the function return type changes, preserving descriptions and other custom content while updating the type information.
 - New setting: **Generate/Update on Save** (checkbox, default: off). When enabled, automatically generates/updates PHPDoc blocks for the entire file every time a PHP file is saved.
 - Status bar indicator for the Generate/Update on Save feature, with click-to-toggle support.
