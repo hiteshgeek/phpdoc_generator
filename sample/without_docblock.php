@@ -60,15 +60,15 @@ function multiple_return_example(array $data, int|string $userId, bool $isTest):
  * function lead_add_form
  *
  * @return void
- *
- * @settings
- * - IS_OUTLET_ENABLE
  */
 function lead_add_form()
 {
-    getSettings("IS_OUTLET_ENABLE");
+    // getSettings("IS_OUTLET_ENABLE");
 }
 
+/**
+ * class OrderProcessor
+ */
 class OrderProcessor
 {
     private int $orderId;

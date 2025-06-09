@@ -6,6 +6,7 @@ import {
 } from "../phpdocParser";
 import {
   buildDocblock,
+  buildPropertyDocblock, // <-- import property docblock builder
   parseDocblock,
   updateDocblock,
 } from "../phpdocDocblock";
@@ -233,6 +234,16 @@ export async function generatePHPDocForProject() {
         const padding = lineText.match(/^[\s]*/)?.[0] ?? "";
         while (docStart >= 0) {
           const line = document.lineAt(docStart).text.trim();
+          // Ignore commented lines
+          if (
+            line.startsWith("//") ||
+            line.startsWith("#") ||
+            line.startsWith("/*")
+          ) {
+            docStart--;
+            docEnd--;
+            continue;
+          }
           if (line === "") {
             docStart--;
             docEnd--;
@@ -242,13 +253,24 @@ export async function generatePHPDocForProject() {
             hasDoc = true;
             break;
           }
+          // If we hit any other non-docblock line, stop
           if (!line.startsWith("*") && !line.startsWith("//")) break;
           docStart--;
           docEnd--;
         }
+        // If found, scan downwards to find the end of the docblock (*/), ignoring commented lines
         if (hasDoc) {
           docEnd = docStart;
           while (docEnd < block.startLine) {
+            const line = document.lineAt(docEnd).text.trim();
+            if (
+              line.startsWith("//") ||
+              line.startsWith("#") ||
+              line.startsWith("/*")
+            ) {
+              docEnd++;
+              continue;
+            }
             if (document.lineAt(docEnd).text.includes("*/")) break;
             docEnd++;
           }
@@ -442,30 +464,65 @@ function findBlockForCursor(
   }
   search(blocks);
   if (found) return found;
-  for (const block of blocks) {
-    if (line < block.startLine && block.startLine - line <= 20) {
-      let docStart = block.startLine - 1;
-      let docEnd = docStart;
-      let foundDoc = false;
-      while (docStart >= 0) {
-        const docLine = document.lineAt(docStart).text.trim();
-        if (docLine.startsWith("/**")) {
-          foundDoc = true;
-          break;
-        }
-        if (docLine === "") {
-          docStart--;
-          docEnd--;
-          continue;
-        }
-        if (!docLine.startsWith("*") && !docLine.startsWith("//")) break;
-        docStart--;
-        docEnd--;
-      }
-      if (foundDoc && line >= docStart && line <= docEnd) {
-        return block;
-      }
+
+  // --- Enhanced: If cursor is in docblock above a block, return that block ---
+  // Scan upwards from cursor to find docblock start
+  let docStart = line;
+  let foundDocStart = false;
+  while (docStart >= 0) {
+    const docLine = document.lineAt(docStart).text.trim();
+    if (docLine.startsWith("/**")) {
+      foundDocStart = true;
+      break;
     }
+    if (docLine === "") {
+      docStart--;
+      continue;
+    }
+    docStart--;
+  }
+  if (foundDocStart) {
+    // Scan downwards to find docblock end (*/)
+    let docEnd = docStart;
+    const totalLines = document.lineCount;
+    while (docEnd < totalLines) {
+      const docLine = document.lineAt(docEnd).text.trim();
+      if (docLine.includes("*/")) {
+        break;
+      }
+      docEnd++;
+    }
+    // Now scan downwards to find the next PHP block (function/class/interface/property)
+    let blockLine = docEnd + 1;
+    while (blockLine < totalLines) {
+      const codeLine = document.lineAt(blockLine).text.trim();
+      // Skip blank lines and comments
+      if (
+        codeLine === "" ||
+        codeLine.startsWith("//") ||
+        codeLine.startsWith("#")
+      ) {
+        blockLine++;
+        continue;
+      }
+      // Try to find a block that starts at this line
+      function findBlockAtLine(blockList: PHPBlock[]): PHPBlock | undefined {
+        for (const block of blockList) {
+          if (block.startLine === blockLine) return block;
+          if (block.children && block.children.length > 0) {
+            const child = findBlockAtLine(block.children);
+            if (child) return child;
+          }
+        }
+        return undefined;
+      }
+      const block = findBlockAtLine(blocks);
+      if (block) return block;
+      break;
+    }
+  }
+  // Fallback: check children recursively
+  for (const block of blocks) {
     if (block.children && block.children.length > 0) {
       const child = findBlockForCursor(block.children, line, document);
       if (child) return child;
@@ -499,7 +556,14 @@ async function generateDocblocksRecursive({
     // Try to infer from return statements in the function body
     const funcStart = document.lineAt(block.startLine).range.start;
     const funcEnd = document.lineAt(block.endLine).range.end;
-    const funcText = document.getText(new vscode.Range(funcStart, funcEnd));
+    let funcText = document.getText(new vscode.Range(funcStart, funcEnd));
+    // Remove block comments (/* ... */)
+    funcText = funcText.replace(/\/\*[\s\S]*?\*\//g, "");
+    // Remove line comments (// ...)
+    funcText = funcText
+      .split("\n")
+      .map((line) => line.replace(/\/\/.*$/, ""))
+      .join("\n");
     const returnMatches = [...funcText.matchAll(/return\s+([^;]+);/g)].map(
       (m) => m[1].trim()
     );
@@ -528,9 +592,15 @@ async function generateDocblocksRecursive({
   let docStart = block.startLine - 1;
   let hasDoc = false;
   let docEnd = docStart;
-  // Scan upwards to find the start of the docblock (/**)
+  // Scan upwards to find the start of the docblock (/**), ignoring only non-docblock comments
   while (docStart >= 0) {
     const line = document.lineAt(docStart).text.trim();
+    // Ignore single-line comments and empty lines, but NOT docblock start
+    if (line.startsWith("//") || line.startsWith("#")) {
+      docStart--;
+      docEnd--;
+      continue;
+    }
     if (line === "") {
       docStart--;
       docEnd--;
@@ -540,14 +610,24 @@ async function generateDocblocksRecursive({
       hasDoc = true;
       break;
     }
+    // If we hit any other non-docblock line, stop
     if (!line.startsWith("*") && !line.startsWith("//")) break;
     docStart--;
     docEnd--;
   }
-  // If found, scan downwards to find the end of the docblock (*/)
+  // If found, scan downwards to find the end of the docblock (*/), ignoring commented lines
   if (hasDoc) {
     docEnd = docStart;
     while (docEnd < block.startLine) {
+      const line = document.lineAt(docEnd).text.trim();
+      if (
+        line.startsWith("//") ||
+        line.startsWith("#") ||
+        line.startsWith("/*")
+      ) {
+        docEnd++;
+        continue;
+      }
       if (document.lineAt(docEnd).text.includes("*/")) break;
       docEnd++;
     }
@@ -572,18 +652,39 @@ async function generateDocblocksRecursive({
   (updatedDocblock as any).type = block.type;
 
   // --- Update settings ---
-  if (!skipSettings && block.type === "function" && (block as any).settings) {
-    const settingsTags = (block as any).settings.map((s: string) => {
-      const desc = settingsDescriptions[s];
-      if (desc && desc.trim() && desc.trim() !== s) {
-        return `${s} : ${desc}`;
-      } else if (desc && desc.trim()) {
-        return `${s} : ${desc}`;
-      } else {
-        return `${s}`;
-      }
-    });
-    (updatedDocblock as any).settings = settingsTags;
+  // Only add settings if present in non-commented code
+  if (!skipSettings && block.type === "function") {
+    // Re-extract uncommented function body
+    const funcStart = document.lineAt(block.startLine).range.start;
+    const funcEnd = document.lineAt(block.endLine).range.end;
+    let funcText = document.getText(new vscode.Range(funcStart, funcEnd));
+    // Remove block comments (/* ... */)
+    funcText = funcText.replace(/\/\*[\s\S]*?\*\//g, "");
+    // Remove line comments (// ...)
+    funcText = funcText
+      .split("\n")
+      .map((line) => line.replace(/\/\/.*$/, ""))
+      .join("\n");
+    const settingsMatches = [
+      ...funcText.matchAll(/getSettings\(["'](.+?)["']\)/g),
+    ];
+    if (settingsMatches.length > 0) {
+      const settingsTags = Array.from(
+        new Set(settingsMatches.map((m) => m[1]))
+      ).map((s) => {
+        const desc = settingsDescriptions[s];
+        if (desc && desc.trim() && desc.trim() !== s) {
+          return `${s} : ${desc}`;
+        } else if (desc && desc.trim()) {
+          return `${s} : ${desc}`;
+        } else {
+          return `${s}`;
+        }
+      });
+      (updatedDocblock as any).settings = settingsTags;
+    } else {
+      delete (updatedDocblock as any).settings;
+    }
   }
 
   // --- Update return type ---
@@ -658,6 +759,43 @@ async function generateDocblocksRecursive({
       new vscode.Position(block.startLine, 0),
       newDocblockLines.join("\n") + "\n"
     );
+  }
+
+  // --- Property docblock generation for class blocks ---
+  if (block.type === "class" && block.children && block.children.length > 0) {
+    for (const child of block.children) {
+      if (child.type === "property") {
+        // Check if a docblock already exists above the property
+        let propDocStart = child.startLine - 1;
+        let hasPropDoc = false;
+        while (propDocStart >= 0) {
+          const line = document.lineAt(propDocStart).text.trim();
+          if (line === "") {
+            propDocStart--;
+            continue;
+          }
+          if (line.startsWith("/**")) {
+            hasPropDoc = true;
+            break;
+          }
+          if (!line.startsWith("*") && !line.startsWith("//")) break;
+          propDocStart--;
+        }
+        if (!hasPropDoc) {
+          // Insert property docblock above the property
+          const propPadding = lines[child.startLine].match(/^[\s]*/)?.[0] ?? "";
+          const propDocblock = buildPropertyDocblock({
+            name: child.name,
+            type: child.returnType,
+            padding: propPadding,
+          });
+          editBuilder.insert(
+            new vscode.Position(child.startLine, 0),
+            propDocblock.join("\n") + "\n"
+          );
+        }
+      }
+    }
   }
 
   // Recursively process child blocks (for classes/interfaces)
