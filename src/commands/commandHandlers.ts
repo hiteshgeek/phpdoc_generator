@@ -41,6 +41,13 @@ export async function generatePHPDoc() {
     );
     return;
   }
+  // If the block is a property, do nothing (property docblocks are only generated as part of class docblock generation)
+  if (block.type === "property") {
+    vscode.window.showInformationMessage(
+      "Property docblocks are only generated as part of class docblock generation. Please run the command on the containing class."
+    );
+    return;
+  }
   // Collect all settings for this block and its children
   const allSettings = new Set<string>();
   function collectSettingsRecursive(block: PHPBlock) {
@@ -582,12 +589,18 @@ async function generateDocblocksRecursive({
     } else {
       const types = new Set();
       for (const ret of returnMatches) {
-        if (/^\[.*\]$/.test(ret)) types.add("array");
+        if (/^intval\(/.test(ret)) types.add("int");
+        else if (/^floatval\(/.test(ret)) types.add("float");
+        else if (/^strval\(/.test(ret)) types.add("string");
+        else if (/^boolval\(/.test(ret)) types.add("bool");
+        else if (/^arrayval\(/.test(ret)) types.add("array");
+        else if (/^\[.*\]$/.test(ret)) types.add("array");
         else if (/^true|false$/.test(ret)) types.add("bool");
         else if (/^-?\d+\.\d+$/.test(ret)) types.add("float");
         else if (/^-?\d+$/.test(ret)) types.add("int");
         else if (/^".*"|'.*'$/.test(ret)) types.add("string");
         else {
+          // Correct regex for new class instantiation
           const newClassMatch = ret.match(/^new\s+([A-Za-z_][A-Za-z0-9_]*)/);
           if (newClassMatch) types.add(newClassMatch[1]);
           else types.add("mixed");
@@ -595,93 +608,37 @@ async function generateDocblocksRecursive({
       }
       returnType = types.size > 0 ? Array.from(types).join("|") : "mixed";
     }
-    block.returnType = returnType; // <-- always set on block
   }
 
-  // --- Docblock region detection ---
-  let docStart = block.startLine - 1;
-  let hasDoc = false;
-  let docEnd = docStart;
-  // Scan upwards to find the start of the docblock (/**), ignoring only non-docblock comments
-  while (docStart >= 0) {
-    const line = document.lineAt(docStart).text.trim();
-    // Ignore single-line comments and empty lines, but NOT docblock start
-    if (line.startsWith("//") || line.startsWith("#")) {
-      docStart--;
-      docEnd--;
-      continue;
-    }
-    if (line === "") {
-      docStart--;
-      docEnd--;
-      continue;
-    }
-    if (line.startsWith("/**")) {
-      hasDoc = true;
-      break;
-    }
-    // If we hit any other non-docblock line, stop
-    if (!line.startsWith("*") && !line.startsWith("//")) break;
-    docStart--;
-    docEnd--;
-  }
-  // If found, scan downwards to find the end of the docblock (*/), ignoring commented lines
-  if (hasDoc) {
-    docEnd = docStart;
-    while (docEnd < block.startLine) {
-      const line = document.lineAt(docEnd).text.trim();
-      if (
-        line.startsWith("//") ||
-        line.startsWith("#") ||
-        line.startsWith("/*")
-      ) {
-        docEnd++;
-        continue;
-      }
-      if (document.lineAt(docEnd).text.includes("*/")) break;
-      docEnd++;
-    }
-  }
-
-  // Parse existing docblock if present
-  let parsedDocblock: any = { params: [], otherTags: [] };
-  if (hasDoc) {
-    const docRange = new vscode.Range(
-      new vscode.Position(docStart, 0),
-      new vscode.Position(docEnd, document.lineAt(docEnd).text.length)
-    );
-    const docLines = document.getText(docRange).split("\n");
-    parsedDocblock = parseDocblock(docLines);
-  }
-  let updatedDocblock = { ...parsedDocblock };
-
-  // --- Update name ---
-  (updatedDocblock as any).name = block.name;
-
-  // --- Update type ---
-  (updatedDocblock as any).type = block.type;
-
-  // --- Update settings ---
-  // Only add settings if present in non-commented code
-  if (!skipSettings && block.type === "function") {
-    // Re-extract uncommented function body
+  // --- Settings Inference ---
+  let settings: string[] | undefined = undefined;
+  if (block.type === "function" && !skipSettings) {
     const funcStart = document.lineAt(block.startLine).range.start;
     const funcEnd = document.lineAt(block.endLine).range.end;
-    let funcText = document.getText(new vscode.Range(funcStart, funcEnd));
-    // Remove block comments (/* ... */)
-    funcText = funcText.replace(/\/\*[\s\S]*?\*\//g, "");
-    // Remove line comments (// ...)
-    funcText = funcText
+    const funcText = document.getText(new vscode.Range(funcStart, funcEnd));
+    const uncommented = funcText
+      .replace(/\/\*.*?\*\//gs, "")
       .split("\n")
-      .map((line) => line.replace(/\/\/.*$/, ""))
+      .filter((line) => !line.trim().startsWith("//"))
       .join("\n");
     const settingsMatches = [
-      ...funcText.matchAll(/getSettings\(["'](.+?)["']\)/g),
+      ...uncommented.matchAll(/getSettings\(["'](.+?)["']\)/g),
     ];
     if (settingsMatches.length > 0) {
-      const settingsTags = Array.from(
-        new Set(settingsMatches.map((m) => m[1]))
-      ).map((s) => {
+      settings = Array.from(new Set(settingsMatches.map((m) => m[1])));
+    }
+  }
+
+  // --- Docblock Generation ---
+  let docblock: string[] = [];
+  if (block.type === "function") {
+    docblock = buildDocblock({
+      summary: "",
+      params: block.params || [],
+      returnType: returnType,
+      lines: [],
+      name: block.name,
+      settings: settings?.map((s: string) => {
         const desc = settingsDescriptions[s];
         if (desc && desc.trim() && desc.trim() !== s) {
           return `${s} : ${desc}`;
@@ -690,230 +647,294 @@ async function generateDocblocksRecursive({
         } else {
           return `${s}`;
         }
-      });
-      (updatedDocblock as any).settings = settingsTags;
-    } else {
-      delete (updatedDocblock as any).settings;
-    }
-  }
-
-  // --- Update return type ---
-  updatedDocblock.returnType = returnType || "mixed";
-
-  // --- Update params ---
-  if (block.params) {
-    const newParams = block.params.map((param) => {
-      const paramName = param.name;
-      const paramType = param.type;
-      const paramDesc = (param as any).desc;
-      // Check if the parameter already exists in the docblock
-      const existingParam = parsedDocblock.params?.find(
-        (p: any) => p.name === paramName
-      );
-      if (existingParam) {
-        // Update existing parameter
-        return {
-          ...existingParam,
-          type: paramType || existingParam.type,
-          desc: paramDesc || (existingParam as any).desc,
-        };
-      } else {
-        // New parameter
-        return {
-          name: paramName,
-          type: paramType,
-          desc: paramDesc,
-        };
-      }
+      }),
+      type: block.type,
+      otherTags: [],
+      padding: padding,
     });
-    updatedDocblock.params = newParams;
-  }
-
-  // --- Update other tags (e.g., @throws) ---
-  if (parsedDocblock.otherTags) {
-    updatedDocblock.otherTags = parsedDocblock.otherTags.filter(
-      (tag: string) => !tag.trim().startsWith("@throws")
-    );
-  }
-  // If you want to add throws tags, you must collect them above and add here
-  // (no block.throws property exists on PHPBlock)
-  if (
-    (block as any)._inferredThrows &&
-    Array.isArray((block as any)._inferredThrows) &&
-    (block as any)._inferredThrows.length > 0
+  } else if (block.type === "property") {
+    // For properties, generate a docblock with @var and type if available
+    docblock = [
+      padding + "/**",
+      padding + " * @var " + (block.returnType || "mixed"),
+      padding + " */",
+    ];
+  } else if (
+    block.type === "class" ||
+    block.type === "interface" ||
+    block.type === "trait"
   ) {
-    const throwsTags = (block as any)._inferredThrows.map(
-      (t: string) => `@throws ${t}`
-    );
-    if (!updatedDocblock.otherTags) updatedDocblock.otherTags = [];
-    updatedDocblock.otherTags.push(...throwsTags);
-  }
-
-  // Build new docblock lines
-  const newDocblockLines = buildDocblock({
-    ...updatedDocblock,
-    padding,
-  });
-
-  // Replace or insert docblock
-  if (hasDoc) {
-    // Replace only the docblock region
-    const docRange = new vscode.Range(
-      new vscode.Position(docStart, 0),
-      new vscode.Position(docEnd, document.lineAt(docEnd).text.length)
-    );
-    editBuilder.replace(docRange, newDocblockLines.join("\n"));
-  } else {
-    // Insert new docblock immediately above the function
-    editBuilder.insert(
-      new vscode.Position(block.startLine, 0),
-      newDocblockLines.join("\n") + "\n"
-    );
-  }
-
-  // --- Property docblock generation for class blocks ---
-  if (block.type === "class" && block.children && block.children.length > 0) {
-    for (const child of block.children) {
-      if (child.type === "property") {
-        generateOrReplacePropertyDocblock({
-          document,
-          editBuilder,
-          block: child,
-          lines,
-        });
+    // --- Generate all property docblocks at once and insert them together above the first property ---
+    if (block.children && block.children.length > 0) {
+      const properties = block.children.filter(
+        (child) => child.type === "property"
+      );
+      if (properties.length > 0) {
+        // Remove all existing docblocks/comments and blank lines above each property before inserting new docblock
+        const propertyEdits: { start: number; end: number; text: string }[] =
+          [];
+        for (const [i, prop] of properties.entries()) {
+          const propLine = document.lineAt(prop.startLine).text;
+          const pad = propLine.match(/^\s*/)?.[0] ?? "";
+          // For the first property, remove ALL blank lines and comments between the opening brace and the property
+          let docStart = prop.startLine - 1;
+          let topDocStart = docStart;
+          if (i === 0) {
+            // Remove all blank lines and comments after the class opening brace
+            while (topDocStart >= 0) {
+              const line = document.lineAt(topDocStart).text.trim();
+              if (
+                line === "" ||
+                line.startsWith("/**") ||
+                line.startsWith("*") ||
+                line.startsWith("//") ||
+                line.startsWith("#") ||
+                line.startsWith("/*")
+              ) {
+                topDocStart--;
+                continue;
+              }
+              break;
+            }
+            // Ensure we don't remove the class opening brace
+            if (topDocStart < block.startLine) topDocStart = block.startLine;
+          } else {
+            // For other properties, remove only docblocks/comments/blank lines above the property
+            while (topDocStart >= 0) {
+              const line = document.lineAt(topDocStart).text.trim();
+              if (line.startsWith("/**") || line.startsWith("*")) {
+                topDocStart--;
+                continue;
+              }
+              if (
+                line === "" ||
+                line.startsWith("//") ||
+                line.startsWith("#") ||
+                line.startsWith("/*")
+              ) {
+                topDocStart--;
+                continue;
+              }
+              break;
+            }
+          }
+          let scan = topDocStart + 1;
+          while (scan < prop.startLine) {
+            const line = document.lineAt(scan).text.trim();
+            if (
+              line === "" ||
+              line.startsWith("/**") ||
+              line.startsWith("*") ||
+              line.startsWith("//") ||
+              line.startsWith("#") ||
+              line.startsWith("/*")
+            ) {
+              scan++;
+              continue;
+            }
+            break;
+          }
+          let insertLine = topDocStart + 1;
+          let replaceEnd = scan;
+          let firstNonBlank = replaceEnd;
+          while (
+            firstNonBlank < prop.startLine &&
+            document.lineAt(firstNonBlank).text.trim() === ""
+          ) {
+            firstNonBlank++;
+          }
+          const replaceRange = new vscode.Range(
+            new vscode.Position(insertLine, 0),
+            new vscode.Position(firstNonBlank, 0)
+          );
+          // Insert exactly one empty line before the docblock, except for the first property (no empty line)
+          const docblock = [
+            (i === 0 ? "" : "\n") + pad + "/**",
+            pad + ` * @var ${prop.returnType || "mixed"}`,
+            pad + " */",
+          ].join("\n");
+          propertyEdits.push({
+            start: insertLine,
+            end: firstNonBlank,
+            text: docblock + "\n",
+          });
+        }
+        // Apply property edits in reverse order to avoid line shifting
+        for (let i = propertyEdits.length - 1; i >= 0; i--) {
+          const edit = propertyEdits[i];
+          const replaceRange = new vscode.Range(
+            new vscode.Position(edit.start, 0),
+            new vscode.Position(edit.end, 0)
+          );
+          editBuilder.replace(replaceRange, edit.text);
+        }
       }
     }
+    // Insert the class docblock as before
+    docblock = buildDocblock({
+      summary: "",
+      params: [],
+      returnType: undefined,
+      lines: [],
+      name: block.name,
+      type: block.type,
+      padding: padding,
+    });
+    // Insert class docblock above the class
+    let docStart = block.startLine - 1;
+    let topDocStart = docStart;
+    let foundAnyDoc = false;
+    while (topDocStart >= 0) {
+      const line = document.lineAt(topDocStart).text.trim();
+      if (line.startsWith("/**") || line.startsWith("*")) {
+        foundAnyDoc = true;
+        topDocStart--;
+        continue;
+      }
+      if (
+        line === "" ||
+        line.startsWith("//") ||
+        line.startsWith("#") ||
+        line.startsWith("/*")
+      ) {
+        topDocStart--;
+        continue;
+      }
+      break;
+    }
+    let scan = topDocStart + 1;
+    while (scan < block.startLine) {
+      const line = document.lineAt(scan).text.trim();
+      if (
+        line === "" ||
+        line.startsWith("/**") ||
+        line.startsWith("*") ||
+        line.startsWith("//") ||
+        line.startsWith("#") ||
+        line.startsWith("/*")
+      ) {
+        scan++;
+        continue;
+      }
+      break;
+    }
+    let insertLine = topDocStart + 1;
+    let replaceEnd = scan;
+    let firstNonBlank = replaceEnd;
+    while (
+      firstNonBlank < block.startLine &&
+      document.lineAt(firstNonBlank).text.trim() === ""
+    ) {
+      firstNonBlank++;
+    }
+    const classReplaceRange = new vscode.Range(
+      new vscode.Position(insertLine, 0),
+      new vscode.Position(firstNonBlank, 0)
+    );
+    editBuilder.replace(classReplaceRange, "\n" + docblock.join("\n") + "\n");
+    return;
   }
-}
 
-// --- Helper: Generate and insert/replace property docblock above a property block ---
-function generateOrReplacePropertyDocblock({
-  document,
-  editBuilder,
-  block,
-  lines,
-}: {
-  document: vscode.TextDocument;
-  editBuilder: vscode.TextEditorEdit;
-  block: PHPBlock;
-  lines: string[];
-}) {
-  // Scan upwards to find the top of all consecutive docblocks/comments above the property
-  let propDocStart = block.startLine - 1;
-  let topDocStart = propDocStart;
+  // --- Remove ALL docblocks/comments above the block before inserting new docblock ---
+  let docStart = block.startLine - 1;
+  let topDocStart = docStart;
   let foundAnyDoc = false;
+  let lastDocEnd = block.startLine; // will be set to the line after the last docblock/comment
   while (topDocStart >= 0) {
     const line = document.lineAt(topDocStart).text.trim();
-    if (line === "") {
+    if (line.startsWith("/**") || line.startsWith("*")) {
+      foundAnyDoc = true;
       topDocStart--;
       continue;
     }
-    if (line.startsWith("/*")) {
-      foundAnyDoc = true;
-      let commentBlockStart = topDocStart;
-      while (commentBlockStart > 0) {
-        const prevLine = document.lineAt(commentBlockStart - 1).text.trim();
-        if (prevLine.startsWith("/*")) {
-          commentBlockStart--;
-        } else {
-          break;
-        }
-      }
-      topDocStart = commentBlockStart;
-      break;
-    }
-    if (line.startsWith("/**")) {
-      foundAnyDoc = true;
-      let docblockStart = topDocStart;
-      while (docblockStart > 0) {
-        const prevLine = document.lineAt(docblockStart - 1).text.trim();
-        if (prevLine.startsWith("/**")) {
-          docblockStart--;
-        } else {
-          break;
-        }
-      }
-      topDocStart = docblockStart;
-      break;
-    }
     if (
-      !line.startsWith("*") &&
-      !line.startsWith("//") &&
-      !line.startsWith("#")
+      line === "" ||
+      line.startsWith("//") ||
+      line.startsWith("#") ||
+      line.startsWith("/*")
     ) {
-      break;
-    }
-    topDocStart--;
-  }
-  // Now scan down from topDocStart to just before the property line to find the end of the last docblock/comment
-  let docEnd = topDocStart;
-  while (docEnd < block.startLine) {
-    const line = document.lineAt(docEnd).text;
-    if (line.includes("*/")) {
-      docEnd++;
+      topDocStart--;
       continue;
     }
-    if (line.trim() === "") {
-      docEnd++;
+    break;
+  }
+  // Now, scan down from topDocStart+1 to block.startLine to find the first non-docblock/comment/blank line (to handle stacked docblocks)
+  let scan = topDocStart + 1;
+  while (scan < block.startLine) {
+    const line = document.lineAt(scan).text.trim();
+    if (
+      line === "" ||
+      line.startsWith("/**") ||
+      line.startsWith("*") ||
+      line.startsWith("//") ||
+      line.startsWith("#") ||
+      line.startsWith("/*")
+    ) {
+      scan++;
       continue;
     }
-    const trimmed = line.trim();
-    if (
-      !trimmed.startsWith("*") &&
-      !trimmed.startsWith("//") &&
-      !trimmed.startsWith("#") &&
-      !trimmed.startsWith("/*") &&
-      !trimmed.startsWith("/**")
-    ) {
-      break;
-    }
-    docEnd++;
+    break;
   }
-  const propPadding = lines[block.startLine].match(/^[\s]*/)?.[0] ?? "";
-  const propDocblock = buildPropertyDocblock({
-    name: block.name,
-    type: block.returnType,
-    padding: propPadding,
-  });
-  let docblockLines = [...propDocblock];
-  // Remove any summary/property name line (should only be @var)
-  docblockLines = docblockLines.filter(
-    (l) =>
-      l.includes("@var ") ||
-      l.trim() === "/**" ||
-      l.trim() === "*/" ||
-      l.trim().startsWith("* @var")
-  );
-  const varLineIdx = docblockLines.findIndex((l) => l.includes("@var "));
-  if (varLineIdx !== -1) {
-    docblockLines[varLineIdx] = `${propPadding} * @var ${
-      block.returnType || "mixed"
-    }`;
-  }
-  while (docblockLines.length > 0 && docblockLines[0].trim() === "")
-    docblockLines.shift();
+  let insertLine = topDocStart + 1;
+  let replaceEnd = scan;
+  // --- Ensure exactly one empty line between docblock and function ---
+  // Scan down from replaceEnd to block.startLine for blank lines
+  let firstNonBlank = replaceEnd;
   while (
-    docblockLines.length > 0 &&
-    docblockLines[docblockLines.length - 1].trim() === ""
-  )
-    docblockLines.pop();
-  let insertText = docblockLines.join("\n") + "\n";
-  // Do NOT add a blank line after the docblock
-  if (foundAnyDoc && topDocStart < block.startLine) {
-    // Replace the entire region from topDocStart to block.startLine
-    const docRange = new vscode.Range(
-      new vscode.Position(topDocStart, 0),
-      new vscode.Position(block.startLine, 0)
-    );
-    editBuilder.replace(docRange, insertText);
-  } else {
-    // No docblock found, just insert above property
-    editBuilder.insert(new vscode.Position(block.startLine, 0), insertText);
+    firstNonBlank < block.startLine &&
+    document.lineAt(firstNonBlank).text.trim() === ""
+  ) {
+    firstNonBlank++;
   }
-  // Ensure a blank line after the property line
-  const propertyLineIdx = block.startLine;
-  const nextLineIdx = propertyLineIdx + 1;
-  if (nextLineIdx >= lines.length || lines[nextLineIdx].trim() !== "") {
-    editBuilder.insert(new vscode.Position(propertyLineIdx + 1, 0), "\n");
+  // The range to replace is from insertLine to firstNonBlank (exclusive)
+  const replaceRange = new vscode.Range(
+    new vscode.Position(insertLine, 0),
+    new vscode.Position(firstNonBlank, 0)
+  );
+  // For functions: Insert docblock with NO empty line before it, and no extra blank lines after docblock
+  // For properties: Insert exactly one empty line before the docblock (except first property, which has none)
+  if (block.type === "function") {
+    editBuilder.replace(replaceRange, docblock.join("\n") + "\n");
+  } else if (block.type === "property") {
+    // Determine if this is the first property in its class
+    let isFirstProperty = false;
+    if (block.parent && block.parent.children) {
+      const properties = block.parent.children.filter(
+        (c) => c.type === "property"
+      );
+      isFirstProperty = properties.length > 0 && properties[0] === block;
+    }
+    const docblockText =
+      (isFirstProperty ? "" : "\n") + docblock.join("\n") + "\n";
+    editBuilder.replace(replaceRange, docblockText);
+  } else {
+    // Default: insert with one empty line before
+    editBuilder.replace(replaceRange, "\n" + docblock.join("\n") + "\n");
+  }
+
+  // --- Recurse into children blocks ---
+  if (recurse && block.children && block.children.length > 0) {
+    for (const child of block.children) {
+      // If the child is a property, always generate its docblock (with deduplication/spacing)
+      if (child.type === "property") {
+        await generateDocblocksRecursive({
+          document,
+          editBuilder,
+          block: child,
+          settingsDescriptions,
+          skipSettings,
+          recurse: false, // don't recurse into property children
+        });
+      } else {
+        await generateDocblocksRecursive({
+          document,
+          editBuilder,
+          block: child,
+          settingsDescriptions,
+          skipSettings,
+          recurse,
+        });
+      }
+    }
   }
 }

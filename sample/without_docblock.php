@@ -2,7 +2,11 @@
 
 function a()
 {
-
+    /**
+     * function b
+     *
+     * @return array
+     */
     function b()
     {
         function e(int $a, string $b)
@@ -15,27 +19,51 @@ function a()
 
     function c() {}
 
+    /**
+     * function d
+     *
+     * @return void
+     */
     function d() {}
 }
-
 /**
  * function add
  *
  * @param float $a
- * @param float $b
+ * @param string $b
  *
- * @return mixed
+ * @return int
  */
-function add(float $a, float $b)
+function add(float $a, string $b)
 {
+    // return $a + $b;
     return intval($a + $b);
+    // return floatval($a + $b);
+    // return 'a' . $b;
 }
 
+/**
+ * class OrderProcessor
+ */
 class OrderProcessor
 {
-    private string $orderId;
-    public array $orderId1;
-    protected float $orderId2;
+    /**
+     * @var int
+     */
+    private int $orderId;
+    /**
+     * @var int
+     */
+    public int $orderId1;
+
+    /**
+     * @var int
+     */
+    protected int $orderId2;
+
+    /**
+     * @var int
+     */
     public int $orderId3 = 3;
 
     public function deleteUser(int $userId) {}
