@@ -1,29 +1,7 @@
 <?php
 
-function multiple_return_example(array $data, int|string $userId, bool $isTest): array|float|string
-{
-    if ($data) {
-        return [];
-    } else if (1) {
-        return 1;
-    }
-    return 3.54;
-    // return "asd";
-}
-
-/**
- * function a
- *
- * @author John Doe
- * @version 1.0
- * @since 2023-10-01 
- *
- * @return array|float|int|string
- */
 function a()
 {
-    $value_1 = 10;
-
     function b()
     {
         function e(int $a, string $b)
@@ -33,42 +11,10 @@ function a()
             return [];
         }
     }
-
     function c() {}
-
-    /**
-     * function d
-     *
-     * @return mixed
-     */
     function d() {}
-
-    // return $value_1;
-    return 123;
-    return 123.4;
-    return [];
-    return "abc";
 }
 
-/**
- * function add
- *
- * @author John Doe
- * @version   1.0
- * @since 2023-10-01
- *
- * @param float $a
- * @param float $b
- *
- * @throws DateMalformedStringException
- * @throws Exception
- * @throws ArithmeticError
- *
- * @return User|array|bool|string
- *
- * @settings
- * - IS_OUTLET_ENABLE
- */
 function add(float $a, float $b)
 {
     if ($a) {
@@ -79,19 +25,26 @@ function add(float $a, float $b)
         return "abc";
     }
 
-    return new User();
-    throw new Exception("An error occurred");
-    throw new ArithmeticError("Arithmetic error occurred");
-    throw new DateMalformedStringException("Malformed date string");
-    getSettings("IS_OUTLET_ENABLE");
+    return new Company();
+}
 
-    try {
-        // some code
-    } catch (Exception $e) {
-        // handle exception
+/**
+ * function multiple_return_example
+ *
+ * @param array $data
+ * @param mixed $userId
+ * @param bool $isTest
+ *
+ * @return void
+ */
+function multiple_return_example(array $data, int|string $userId, bool $isTest): string|int|array
+{
+    if ($a) {
+        return [];
+    } else if (1) {
+        return "asd";
     }
-
-    return new Exception();
+    return 34.5;
 }
 
 /**
@@ -107,9 +60,6 @@ function lead_add_form()
     getSettings("IS_OUTLET_ENABLE");
 }
 
-/**
- * class OrderProcessor
- */
 class OrderProcessor
 {
     private int $orderId;
@@ -117,26 +67,24 @@ class OrderProcessor
     protected int $orderId2;
     public int $orderId3 = 3;
 
-    public function deleteUser(int $userId): string
-    {
-        return "User with ID $userId deleted.";
-    }
+    public function deleteUser(int $userId) {}
 
-    public function addUser(int $userId): void {}
+    public function addUser(int $userId): string|float
+    {
+        return 1.4;
+    }
 
     protected function updateUser(int $userId) {}
 }
 
-function notifyUser(string $email, int $orderId): int|bool|string
+function notifyUser(string $email, int $orderId): bool
 {
-    return 1; // or return true;
-    return true; // or return false;
+    return true;
 }
 
 function getUser($id): ?string
 {
-    return null; // or return "John Doe";
-    return "Jane Doe";
+    return null;
 }
 
 trait LogsActivity {}
@@ -147,7 +95,7 @@ function getSettings(): array
 {
     return [
         'IS_OUTLET_ENABLE' => true,
-        'ANOTHER_SETTING' => 'value',
+        'IS_FEATURE_ENABLED' => false,
     ];
 }
 
@@ -160,8 +108,7 @@ interface Cacheable
 
 function generateReport(array $params): string
 {
-    // Generate report logic
-    return "Report generated successfully";
+    return "Report generated with params: " . implode(", ", $params);
 }
 
 function updatePrices(array $prices): void {}
@@ -173,6 +120,15 @@ class User extends Model
     public function testUserCreation(): void {}
 }
 
+/**
+ * function calculateEmi
+ *
+ * @param float $principal
+ * @param float $rate
+ * @param int $years
+ *
+ * @return float
+ */
 function calculateEmi(float $principal, float $rate, int $years): float
 {
     $monthlyRate = $rate / 12 / 100;

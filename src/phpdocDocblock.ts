@@ -317,7 +317,8 @@ export function buildPropertyDocblock({
       : padding > 0
       ? " ".repeat(padding)
       : "";
-  // Ensure consistent spacing with the main docblock format
-  const lines = [pad + "/**", pad + ` * @var ${type || "mixed"}`, pad + " */"];
+  // Use the provided type or default to 'mixed'
+  const docType = type && type.trim() !== "" ? type : "mixed";
+  const lines = [pad + "/**", pad + ` * @var ${docType}`, pad + " */"];
   return lines;
 }

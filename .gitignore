@@ -5,6 +5,7 @@ node_modules
 *.vsix
 .env
 settings_cache.json
+.prompt.md
 
 # Ignore compiled/bundled files
 *.js

@@ -560,10 +560,26 @@ async function generateDocblocksRecursive({
       }
       let uniqueTypes: string[] = useOnlyDeclared
         ? declaredType
-          ? declaredType
-              .split("|")
-              .map((s: string) => s.trim())
-              .filter((s: string) => !!s)
+          ? (() => {
+              let declaredTypeStr = "";
+              if (typeof declaredType === "string") {
+                declaredTypeStr = declaredType;
+              } else if (declaredType !== undefined && declaredType !== null) {
+                try {
+                  declaredTypeStr = String(declaredType);
+                } catch (e) {
+                  declaredTypeStr = "";
+                  console.warn(
+                    "[PHPDocGen] [WARN] Could not convert declaredType to string:",
+                    e
+                  );
+                }
+              }
+              return declaredTypeStr
+                .split("|")
+                .map((s: string) => s.trim())
+                .filter((s: string) => !!s);
+            })()
           : []
         : Array.from(new Set(inferredTypes));
       // Remove 'void' if other types exist
@@ -592,7 +608,21 @@ async function generateDocblocksRecursive({
         if (useOnlyDeclared) {
           unionType = uniqueTypes.sort().join("|");
         } else {
-          const declaredTypesArr = declaredType
+          let declaredTypeStr = "";
+          if (typeof declaredType === "string") {
+            declaredTypeStr = declaredType;
+          } else if (declaredType !== undefined && declaredType !== null) {
+            try {
+              declaredTypeStr = String(declaredType);
+            } catch (e) {
+              declaredTypeStr = "";
+              console.warn(
+                "[PHPDocGen] [WARN] Could not convert declaredType to string:",
+                e
+              );
+            }
+          }
+          const declaredTypesArr = declaredTypeStr
             .split("|")
             .map((s: string) => s.trim())
             .filter((s: string) => !!s);

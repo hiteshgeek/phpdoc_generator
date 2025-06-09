@@ -56,21 +56,12 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
     switch (node.kind) {
       case "function":
       case "method": {
-        // PATCH: Robustly extract function/method name for top-level and class methods
         let funcName = node.name?.name || node.name || "";
-        if (!funcName && node.loc && typeof node.loc.start === "object") {
-          try {
-            const lines = (node.loc.source || "").split("\n");
-            const line = lines[node.loc.start.line - 1] || "";
-            const match = line.match(/function\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
-            if (match) funcName = match[1];
-          } catch {}
-        }
         const params = (node.arguments || []).map((p: any) => ({
           name: typeof p.name === "string" ? p.name : p.name?.name,
           type: p.type ? p.type.name : undefined,
         }));
-        // PATCH: If explicit return type is present, use only that and ignore inferred types
+        // Robust extraction of explicit return type (including union types)
         let returnType: string | undefined;
         let hasExplicitReturnType = false;
         if (node.type) {
@@ -98,64 +89,19 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
                 .filter(Boolean)
                 .join("|");
               hasExplicitReturnType = !!returnType;
+            } else if (node.type.kind === "nullabletype" && node.type.what) {
+              const baseType =
+                node.type.what.raw ||
+                node.type.what.name ||
+                (typeof node.type.what === "string" ? node.type.what : "");
+              returnType = baseType ? `null|${baseType}` : undefined;
+              hasExplicitReturnType = !!returnType;
             } else {
               returnType = node.type.raw || node.type.name || undefined;
               hasExplicitReturnType = !!returnType;
             }
           }
-
-          // If node type is still not extracted correctly or empty, try to parse from source code (for union types)
-          if (
-            (!returnType || returnType === "") &&
-            node.loc &&
-            typeof node.loc.source === "string"
-          ) {
-            try {
-              const source = node.loc.source;
-              // Enhanced regex pattern to match return type after the closing parenthesis: function name(...): Type|OtherType
-              // This handles both simple and complex union types with full class namespaces
-              const returnTypeMatch = source.match(
-                /\)(?:\s*):(?:\s*)([^{;\n]+)/
-              );
-              if (returnTypeMatch && returnTypeMatch[1]) {
-                returnType = returnTypeMatch[1].trim();
-                hasExplicitReturnType = true;
-                console.log(`Extracted return type: ${returnType}`);
-              }
-            } catch (e) {
-              console.error("Error parsing return type from source:", e);
-            }
-          }
-
-          // Extra fallback: if still no return type but we know from the source it should have one
-          // This helps with functions that have union types that weren't correctly parsed
-          if (
-            (!returnType || returnType === "") &&
-            node.loc &&
-            typeof node.loc.source === "string"
-          ) {
-            try {
-              // Look for common PHP 8 union type patterns in the function signature
-              const source = node.loc.source;
-              if (source.includes("):") || source.includes("): ")) {
-                // Enhanced pattern to capture more complex union types, including nullable and fully qualified names
-                const unionTypeMatch = source.match(
-                  /\)(?:\s*):(?:\s*)([a-zA-Z0-9_\\|?]+|(?:[a-zA-Z0-9_\\]+\|)+[a-zA-Z0-9_\\]+)/
-                );
-                if (unionTypeMatch && unionTypeMatch[1]) {
-                  returnType = unionTypeMatch[1].trim();
-                  hasExplicitReturnType = true;
-                  console.log(
-                    `Fallback extracted union return type: ${returnType}`
-                  );
-                }
-              }
-            } catch (e) {
-              console.error("Error in fallback return type extraction:", e);
-            }
-          }
         }
-        // Always use type 'function' for both functions and methods for docblock logic
         currentBlock = addBlock(
           "function",
           funcName,
@@ -184,26 +130,25 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
         if (Array.isArray(node.body)) {
           for (const stmt of node.body) {
             if (stmt.kind === "property") {
-              // PHP-Parser: stmt.name can be Identifier or array of Identifiers (for multiple props)
-              if (Array.isArray(stmt.name)) {
-                for (const n of stmt.name) {
-                  addBlock(
-                    "property",
-                    n.name || "",
-                    stmt.loc,
-                    undefined,
-                    stmt.type ? stmt.type.name || stmt.type : undefined,
-                    currentBlock,
-                    level + 1
-                  );
+              // PATCH: Robustly extract all property names and types
+              const propNames = Array.isArray(stmt.name)
+                ? stmt.name.map((n: any) => n.name || "")
+                : [stmt.name?.name || ""];
+              for (let i = 0; i < propNames.length; i++) {
+                let propType: string | undefined = undefined;
+                if (stmt.type) {
+                  if (typeof stmt.type === "string") {
+                    propType = stmt.type;
+                  } else if (typeof stmt.type === "object") {
+                    propType = stmt.type.name || stmt.type.raw || undefined;
+                  }
                 }
-              } else {
                 addBlock(
                   "property",
-                  stmt.name?.name || "",
+                  propNames[i],
                   stmt.loc,
                   undefined,
-                  stmt.type ? stmt.type.name || stmt.type : undefined,
+                  propType,
                   currentBlock,
                   level + 1
                 );
