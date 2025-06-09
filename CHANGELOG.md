@@ -4,6 +4,8 @@
 
 ### Added
 
+- **PHP 8 Union Return Type Support**: Improved handling of union return types in function signatures (e.g., `function example(): int|string|bool`). The extension now correctly extracts, parses, and generates docblocks for functions with union return types.
+- **Union Type Docblock Updates**: The docblock generator now correctly updates existing docblocks when the function return type changes, preserving descriptions and other custom content while updating the type information.
 - New setting: **Generate/Update on Save** (checkbox, default: off). When enabled, automatically generates/updates PHPDoc blocks for the entire file every time a PHP file is saved.
 - Status bar indicator for the Generate/Update on Save feature, with click-to-toggle support.
 - Command palette command and keyboard shortcut (`Ctrl+Alt+9`) to toggle the Generate/Update on Save feature.
@@ -12,6 +14,15 @@
 - **Custom Folding Provider:** Implemented a custom FoldingRangeProvider so that only PHPDoc blocks are folded/unfolded, and nested/recursive function docblocks are handled correctly. (Better than inbuild docblock collapse\expand commmands)
 - **@var Docblock Support:** The extension now generates `@var` docblocks for all class properties.
 - **Consistent Docblock Formatting:** Improved docblock formatting and tag ordering for robust and consistent output.
+
+### Fixed
+
+- Fixed issue where functions with union return types weren't getting proper docblocks generated.
+- Fixed malformed docblocks that contained stray `* /` and `/` lines in generated output.
+- Fixed issue where the return type wasn't being properly extracted from PHP 8 union type declarations.
+- Fixed docblock closing delimiter indentation to match the opening line.
+- Fixed docblock formatting to ensure proper spacing in the closing tag (` */` instead of `*/`).
+- Improved docblock tag grouping to match PHP best practices - metadata tags like `@settings`, `@author`, etc. now don't have newlines between them.
 
 ---
 

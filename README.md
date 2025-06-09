@@ -15,6 +15,7 @@ See the [CHANGELOG.md](./CHANGELOG.md) for full details.
 
 **Latest Highlights:**
 
+- **Improved PHP 8 Union Return Type Support**: Extension now correctly handles functions with union return types (`int|string`, `array|bool`, etc.), generating accurate docblocks and properly updating existing ones.
 - Automatic synchronization of `@throws` tags in the docblock—new exception types are added when detected in the function, and obsolete tags are removed if the corresponding throw statement is commented out or deleted.
 - The default docblock structure is now:
 
@@ -44,6 +45,7 @@ See the [CHANGELOG.md](./CHANGELOG.md) for full details.
   - Generates and updates PHPDoc blocks for functions, methods, and classes.
   - Preserves user-written docblock content, including multi-line summaries and descriptions.
   - Robust handling of edge cases and formatting.
+  - Full support for PHP 8 union return types and parameter types.
 
 - **Custom `@settings` Block Integration** _(for Accrete Globus Technology only)_
 

@@ -30,13 +30,6 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
     parent?: PHPBlock,
     level: number = 0
   ): PHPBlock {
-    if (returnType === "mixed") {
-      console.log(
-        `[DEBUG] parsePHPBlocks: addBlock returnType is 'mixed' for`,
-        type,
-        name
-      );
-    }
     const block: PHPBlock = {
       type,
       name,
@@ -108,6 +101,57 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
             } else {
               returnType = node.type.raw || node.type.name || undefined;
               hasExplicitReturnType = !!returnType;
+            }
+          }
+
+          // If node type is still not extracted correctly or empty, try to parse from source code (for union types)
+          if (
+            (!returnType || returnType === "") &&
+            node.loc &&
+            typeof node.loc.source === "string"
+          ) {
+            try {
+              const source = node.loc.source;
+              // Enhanced regex pattern to match return type after the closing parenthesis: function name(...): Type|OtherType
+              // This handles both simple and complex union types with full class namespaces
+              const returnTypeMatch = source.match(
+                /\)(?:\s*):(?:\s*)([^{;\n]+)/
+              );
+              if (returnTypeMatch && returnTypeMatch[1]) {
+                returnType = returnTypeMatch[1].trim();
+                hasExplicitReturnType = true;
+                console.log(`Extracted return type: ${returnType}`);
+              }
+            } catch (e) {
+              console.error("Error parsing return type from source:", e);
+            }
+          }
+
+          // Extra fallback: if still no return type but we know from the source it should have one
+          // This helps with functions that have union types that weren't correctly parsed
+          if (
+            (!returnType || returnType === "") &&
+            node.loc &&
+            typeof node.loc.source === "string"
+          ) {
+            try {
+              // Look for common PHP 8 union type patterns in the function signature
+              const source = node.loc.source;
+              if (source.includes("):") || source.includes("): ")) {
+                // Enhanced pattern to capture more complex union types, including nullable and fully qualified names
+                const unionTypeMatch = source.match(
+                  /\)(?:\s*):(?:\s*)([a-zA-Z0-9_\\|?]+|(?:[a-zA-Z0-9_\\]+\|)+[a-zA-Z0-9_\\]+)/
+                );
+                if (unionTypeMatch && unionTypeMatch[1]) {
+                  returnType = unionTypeMatch[1].trim();
+                  hasExplicitReturnType = true;
+                  console.log(
+                    `Fallback extracted union return type: ${returnType}`
+                  );
+                }
+              }
+            } catch (e) {
+              console.error("Error in fallback return type extraction:", e);
             }
           }
         }
@@ -246,16 +290,9 @@ export function collectReturnTypesFromFunctionNode(node: any): string[] {
           if (n.expr.what && n.expr.what.name) types.add(n.expr.what.name);
           else {
             types.add("mixed");
-            console.log(
-              `[DEBUG] collectReturnTypesFromFunctionNode: return new (unknown) => 'mixed'`
-            );
           }
         } else {
           types.add("mixed");
-          console.log(
-            `[DEBUG] collectReturnTypesFromFunctionNode: return (unknown expr) => 'mixed'`,
-            n.expr
-          );
         }
       } else if (n.kind === "throw") {
         if (
@@ -322,12 +359,6 @@ export function collectReturnTypesFromFunctionNode(node: any): string[] {
   }
   if (node && node.body && Array.isArray(node.body.children)) {
     walkStatements(node.body.children);
-  }
-  if (Array.from(types).includes("mixed")) {
-    console.log(
-      `[DEBUG] collectReturnTypesFromFunctionNode: final types include 'mixed':`,
-      Array.from(types)
-    );
   }
   return Array.from(types);
 }

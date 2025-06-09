@@ -53,9 +53,6 @@ function a()
 /**
  * function add
  *
- * @settings
- * - IS_OUTLET_ENABLE
- *
  * @author John Doe
  * @version   1.0
  * @since 2023-10-01
@@ -68,6 +65,9 @@ function a()
  * @throws ArithmeticError
  *
  * @return User|array|bool|string
+ *
+ * @settings
+ * - IS_OUTLET_ENABLE
  */
 function add(float $a, float $b)
 {
@@ -97,10 +97,10 @@ function add(float $a, float $b)
 /**
  * function lead_add_form
  *
+ * @return void
+ *
  * @settings
  * - IS_OUTLET_ENABLE
- *
- * @return void
  */
 function lead_add_form()
 {
@@ -127,14 +127,6 @@ class OrderProcessor
     protected function updateUser(int $userId) {}
 }
 
-/**̥̥̥
- * function notifyUser
- *
- * @param string $email
- * @param int $orderId
- *
- * @return bool
- */
 function notifyUser(string $email, int $orderId): int|bool|string
 {
     return 1; // or return true;

@@ -75,13 +75,9 @@ export async function generatePHPDoc() {
       block,
       settingsDescriptions,
       skipSettings: !!settingsDescriptions.__SKIP_SETTINGS,
-      recurse: false,
+      recurse: false, // Only process the single block, not all blocks in file
     });
   });
-  // Remove notification for single block docblock generation
-  // vscode.window.showInformationMessage(
-  //   "PHPDoc generated/updated for current block."
-  // );
 }
 
 export async function generatePHPDocForFile() {
@@ -146,10 +142,6 @@ export async function generatePHPDocForFile() {
       )
     );
   });
-  // Remove notification for file-level docblock generation
-  // vscode.window.showInformationMessage(
-  //   "PHPDoc generated for all blocks in the current file."
-  // );
 }
 
 export async function generatePHPDocForProject() {
@@ -480,6 +472,7 @@ function findBlockForCursor(
   return undefined;
 }
 
+// Helper: Recursively generate docblocks for all blocks (with correct padding)
 async function generateDocblocksRecursive({
   document,
   editBuilder,
@@ -613,9 +606,18 @@ async function generateDocblocksRecursive({
       }
       // Never allow [object Object] or empty string
       if (!unionType || unionType === "[object Object]") {
-        unionType = "mixed";
+        unionType = "void";
       }
       block.returnType = unionType || "void";
+      // --- PATCH: If block.returnType is still empty or invalid, force to 'void' ---
+      if (!block.returnType || block.returnType === "[object Object]") {
+        block.returnType = "void";
+      }
+    } else {
+      // --- PATCH: If no targetNode found, ensure block.returnType is at least 'void' ---
+      if (!block.returnType || block.returnType === "[object Object]") {
+        block.returnType = "void";
+      }
     }
   }
   // Check for existing docblock
@@ -747,6 +749,14 @@ async function generateDocblocksRecursive({
         }
       }
     }
+  }
+  // Only show notification for the main block if not recursing (single-block mode)
+  if (!recurse) {
+    // vscode.window.showInformationMessage(
+    //   `[PHPDoc Generator] Docblock generated/updated for '${block.name}' (${
+    //     block.type
+    //   }) at line ${block.startLine + 1}.`
+    // );
   }
   // Always recurse into children
   if (recurse && block.children && block.children.length > 0) {

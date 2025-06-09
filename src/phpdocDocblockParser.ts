@@ -36,9 +36,21 @@ export function parseDocblock(lines: string[]): DocblockInfo {
       params.push({ name, type, desc });
     } else if (l.startsWith("@return")) {
       inDesc = false;
-      const [, type, desc] = l.match(/@return\s+(\S+)?\s*(.*)/) || [];
-      returnType = type;
-      returnDesc = desc;
+      // Enhanced regex to better capture union types (|) and full class paths with namespaces
+      const [, typeCapture, desc] =
+        l.match(/@return\s+([a-zA-Z0-9_\\|]+(?:\[\])?)\s*(.*)/) || [];
+      if (typeCapture) {
+        // Make sure we preserve the exact union type syntax from the docblock
+        returnType = typeCapture.trim();
+        returnDesc = desc;
+      } else {
+        // Fallback to less strict parsing if the enhanced regex fails
+        const fallbackMatch = l.match(/@return\s+(\S+)?\s*(.*)/);
+        if (fallbackMatch) {
+          returnType = fallbackMatch[1];
+          returnDesc = fallbackMatch[2];
+        }
+      }
     } else if (
       l.startsWith("@") &&
       !l.startsWith("@param") &&
