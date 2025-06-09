@@ -1,8 +1,32 @@
 # Change Log
 
-All notable changes to the "phpdoc-generator" extension will be documented in this file.
+## [0.0.4] - 2025-06-10
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+### Added
+
+- **PHP 8 Union Return Type Support**: Improved handling of union return types in function signatures (e.g., `function example(): int|string|bool`). The extension now correctly extracts, parses, and generates docblocks for functions with union return types.
+- **Class and Property Docblock Generation:** The extension can now generate docblocks for classes and all class properties, not just functions. Property docblocks use `@var {type}` and follow correct spacing and indentation rules.
+- **Return Type Inference from Type Casting:** The extension now infers return types from explicit type casting expressions (e.g., `(int)`, `(string)`, etc.) in return statements, improving the accuracy of generated `@return` tags.
+- **Union Type Docblock Updates**: The docblock generator now correctly updates existing docblocks when the function return type changes, preserving descriptions and other custom content while updating the type information.
+- New setting: **Generate/Update on Save** (checkbox, default: off). When enabled, automatically generates/updates PHPDoc blocks for the entire file every time a PHP file is saved.
+- Status bar indicator for the Generate/Update on Save feature, with click-to-toggle support.
+- Command palette command and keyboard shortcut (`Ctrl+Alt+9`) to toggle the Generate/Update on Save feature.
+- The status bar now updates immediately when the setting is changed from the settings UI.
+- **Docblock Folding/Expanding:** Added commands and keyboard shortcuts (`Ctrl+Alt+5` to collapse, `Ctrl+Alt+6` to expand) to fold and unfold all PHPDoc blocks in the current file. These commands are available in the Command Palette as "PHPDoc Generator: Collapse All Docblocks in File" and "PHPDoc Generator: Expand All Docblocks in File".
+- **Custom Folding Provider:** Implemented a custom FoldingRangeProvider so that only PHPDoc blocks are folded/unfolded, and nested/recursive function docblocks are handled correctly. (Better than inbuild docblock collapse\expand commmands)
+- **@var Docblock Support:** The extension now generates `@var` docblocks for all class properties.
+- **Consistent Docblock Formatting:** Improved docblock formatting and tag ordering for robust and consistent output.
+
+### Fixed
+
+- Fixed issue where functions with union return types weren't getting proper docblocks generated.
+- Fixed malformed docblocks that contained stray `* /` and `/` lines in generated output.
+- Fixed issue where the return type wasn't being properly extracted from PHP 8 union type declarations.
+- Fixed docblock closing delimiter indentation to match the opening line.
+- Fixed docblock formatting to ensure proper spacing in the closing tag (` */` instead of `*/`).
+- Improved docblock tag grouping to match PHP best practices - metadata tags like `@settings`, `@author`, etc. now don't have newlines between them.
+
+---
 
 ## [0.0.3] - 2025-06-06
 
@@ -57,7 +81,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ---
 
-## [0.0.2] - 2025-04-10
+## [0.0.2] - 2025-06-04
 
 ### Improvements
 
@@ -72,6 +96,6 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ---
 
-## [0.0.1] - 2025-03-01
+## [0.0.1] - 2025-06-04
 
 - Initial release

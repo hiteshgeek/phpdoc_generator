@@ -1,8 +1,8 @@
 {
   "name": "phpdoc-generator-hiteshgeek",
-  "displayName": "PHPDoc Generator (Hitesh Vaghela)",
+  "displayName": "PHPDoc Generator (hiteshgeek)",
   "description": "Intelligently generates and updates PHPDoc blocks for PHP code. Supports command palette, keyboard shortcut, and preserves user docblock content.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -35,6 +35,21 @@
         "command": "phpdoc-generator.refreshSettingsCache",
         "title": "Refresh Settings Cache",
         "category": "PHPDoc Generator"
+      },
+      {
+        "command": "phpdoc-generator.toggleGenerateUpdateOnSave",
+        "title": "Toggle Generate/Update on Save",
+        "category": "PHPDoc Generator"
+      },
+      {
+        "command": "phpdoc-generator.collapseAllDocblocks",
+        "title": "Collapse All Docblocks in File",
+        "category": "PHPDoc Generator"
+      },
+      {
+        "command": "phpdoc-generator.expandAllDocblocks",
+        "title": "Expand All Docblocks in File",
+        "category": "PHPDoc Generator"
       }
     ],
     "keybindings": [
@@ -57,12 +72,46 @@
         "key": "ctrl+alt+7",
         "command": "phpdoc-generator.refreshSettingsCache",
         "when": "editorTextFocus"
+      },
+      {
+        "key": "ctrl+alt+9",
+        "command": "phpdoc-generator.toggleGenerateUpdateOnSave",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "phpdoc-generator.collapseAllDocblocks",
+        "key": "ctrl+alt+5",
+        "when": "editorTextFocus && editorLangId == php"
+      },
+      {
+        "command": "phpdoc-generator.expandAllDocblocks",
+        "key": "ctrl+alt+6",
+        "when": "editorTextFocus && editorLangId == php"
       }
     ],
     "configuration": {
       "type": "object",
       "title": "PHPDoc Generator",
       "properties": {
+        "phpdoc-generator-hiteshgeek.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/vendor/**",
+            "**/.git/**",
+            "**/.DS_Store"
+          ],
+          "description": "Glob patterns for folders and files to exclude from project-wide docblock generation. Follows the same format as 'files.exclude'."
+        },
+        "phpdoc-generator-hiteshgeek.generateUpdateOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "If enabled, the extension will automatically generate/update PHPDoc blocks for the entire file when any PHP file is saved.",
+          "title": "Generate/Update on Save"
+        },
         "phpdoc-generator-hiteshgeek.dbHost": {
           "type": "string",
           "default": "",
@@ -88,19 +137,10 @@
           "default": "",
           "description": "MySQL database name"
         },
-        "phpdoc-generator-hiteshgeek.licid": {
+        "phpdoc-generator-hiteshgeek.dbLicid": {
           "type": "string",
           "default": "",
           "description": "LICID value for settings fetcher (if required)"
-        },
-        "phpdoc-generator-hiteshgeek.exclude": {
-          "type": "array",
-          "default": [
-            "**/node_modules/**",
-            "**/vendor/**",
-            "**/.git/**"
-          ],
-          "description": "Glob patterns for folders and files to exclude from project-wide docblock generation."
         }
       }
     }
@@ -109,27 +149,18 @@
     "vscode:prepublish": "npm run package",
     "compile": "webpack",
     "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "npm run compile-tests && mocha out/test/phpdocDocblock.test.mjs"
+    "package": "webpack --mode production --devtool hidden-source-map"
   },
   "devDependencies": {
-    "@types/chai": "^5.2.2",
-    "@types/mocha": "^10.0.10",
     "@types/node": "^20.17.57",
     "@types/vscode": "^1.100.0",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.5.2",
-    "chai": "^5.2.0",
     "eslint": "^9.25.1",
-    "mocha": "^11.5.0",
+    "ts-jest": "^29.3.4",
     "ts-loader": "^9.5.2",
-    "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
     "webpack": "^5.99.7",
     "webpack-cli": "^6.0.1"

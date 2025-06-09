@@ -16,3 +16,4 @@ vsc-extension-quickstart.md
 *.php
 README_backup.md
 *.vsix
+*.prompt.md
