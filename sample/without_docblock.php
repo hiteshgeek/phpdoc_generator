@@ -2,11 +2,6 @@
 
 function a()
 {
-    /**
-     * function b
-     *
-     * @return array
-     */
     function b()
     {
         function e(int $a, string $b)
@@ -19,25 +14,9 @@ function a()
 
     function c() {}
 
-    /**
-     * function d
-     *
-     * @return void
-     */
     function d() {}
 }
-/**
- * function add
- *
- * @param float $a
- * @param string $b
- *
- * @return int
- *
- * @settings
- * - test1
- * - test
- */
+
 function add(float $a, string $b)
 {
     getSettings("test1");
@@ -49,29 +28,11 @@ function add(float $a, string $b)
     // return 'a' . $b;
 }
 
-/**
- * class OrderProcessor
- */
 class OrderProcessor
 {
-    /**
-     * @var int
-     */
     private int $orderId;
-
-    /**
-     * @var int
-     */
     public int $orderId1;
-
-    /**
-     * @var int
-     */
     protected int $orderId2;
-
-    /**
-     * @var int
-     */
     public int $orderId3 = 3;
 
     public function deleteUser(int $userId) {}

@@ -87,7 +87,6 @@ function lead_add_form()
  * - IN_LEAD_TALUKA_IS_ENABLED : IN_LEAD_TALUKA_IS_ENABLED
  * - IN_LEAD_DISTRICT_IS_ENABLED : IN_LEAD_DISTRICT_IS_ENABLED
  * - IS_ROUTE_ENABLE : IS_ROUTE_ENABLE
- * - IS_SITE_DETAILS_ENABLE_FOR_LEAD : IS_SITE_DETAILS_ENABLE_FOR_LEAD
  * - IS_LEAD_UPLOAD_FILE_ENABLE
  *
  * @param mixed $data
@@ -826,6 +825,7 @@ function upload_file($files1, $data2)
  *
  * @param mixed $files1
  * @param mixed $data2
+ *
  * @return void
  */
 function delete_upload_file($files1, $data2)
