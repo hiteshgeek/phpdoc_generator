@@ -90,10 +90,15 @@ export async function generatePHPDoc() {
 
 export async function generatePHPDocForFile() {
   const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.document.languageId !== "php") return;
+  console.log("[PHPDoc] generatePHPDocForFile called");
+  if (!editor || editor.document.languageId !== "php") {
+    console.log("[PHPDoc] No active PHP editor");
+    return;
+  }
   const { document } = editor;
   const text = document.getText();
   const blocks = parsePHPBlocks(text);
+  console.log(`[PHPDoc] Parsed blocks: count = ${blocks.length}`);
   const allSettings = new Set<string>();
   function collectSettingsRecursive(block: PHPBlock) {
     if (block.type === "function") {
@@ -121,28 +126,149 @@ export async function generatePHPDocForFile() {
   if (allSettings.size > 0) {
     settingsDescriptions = await ensureSettingsCache(Array.from(allSettings));
   }
-  // Recursively walk all blocks and generate docblocks for each
-  function walkAndGenerate(
-    block: PHPBlock,
-    editBuilder: vscode.TextEditorEdit
-  ) {
-    generateDocblocksRecursive({
-      document,
-      editBuilder,
-      block,
-      settingsDescriptions,
-      skipSettings: !!settingsDescriptions.__SKIP_SETTINGS,
-      recurse: false,
-    });
-    if (block.children && block.children.length > 0) {
-      for (const child of block.children) {
-        walkAndGenerate(child, editBuilder);
-      }
+  // --- Collect all edits first ---
+  const allBlocks: PHPBlock[] = [];
+  function flattenBlocks(block: PHPBlock) {
+    allBlocks.push(block);
+    if (
+      block.children &&
+      Array.isArray(block.children) &&
+      block.children.length > 0
+    ) {
+      block.children.forEach(flattenBlocks);
     }
   }
-  await editor.edit(async (editBuilder) => {
-    for (const block of blocks) {
-      walkAndGenerate(block, editBuilder);
+  for (const block of blocks) {
+    flattenBlocks(block);
+  }
+  console.log(`[PHPDoc] Flattened blocks: count = ${allBlocks.length}`);
+  allBlocks.sort((a, b) => b.startLine - a.startLine);
+  const visited = new Set<string>();
+  // Prepare all edits synchronously
+  const edits: { range: vscode.Range; text: string }[] = [];
+  for (const block of allBlocks) {
+    // Use a synchronous version of generateDocblocksRecursive for this context
+    const blockKey = `${block.type}:${block.startLine}`;
+    if (visited.has(blockKey)) continue;
+    visited.add(blockKey);
+    // Only basic docblock generation for demo/fix (no settings, no async)
+    const lines = document.getText().split("\n");
+    const padding = lines[block.startLine].match(/^[\s]*/)?.[0] ?? "";
+    let docblock: string[] = [];
+    if (block.type === "function") {
+      docblock = buildDocblock({
+        summary: "",
+        params: block.params || [],
+        returnType: block.returnType,
+        lines: [],
+        name: block.name,
+        type: block.type,
+        padding: padding,
+      });
+    } else if (block.type === "property") {
+      docblock = [
+        padding + "/**",
+        padding + " * @var " + (block.returnType || "mixed"),
+        padding + " */",
+      ];
+    } else if (
+      block.type === "class" ||
+      block.type === "interface" ||
+      block.type === "trait"
+    ) {
+      docblock = buildDocblock({
+        summary: "",
+        params: [],
+        returnType: undefined,
+        lines: [],
+        name: block.name,
+        type: block.type,
+        padding: padding,
+      });
+    } else {
+      continue;
+    }
+    // Find where to insert/replace docblock
+    let docStart = block.startLine - 1;
+    let topDocStart = docStart;
+    while (topDocStart >= 0) {
+      const line = document.lineAt(topDocStart).text.trim();
+      if (
+        line.startsWith("/**") ||
+        line.startsWith("*") ||
+        line === "" ||
+        line.startsWith("//") ||
+        line.startsWith("#") ||
+        line.startsWith("/*")
+      ) {
+        topDocStart--;
+        continue;
+      }
+      break;
+    }
+    let scan = topDocStart + 1;
+    while (scan < block.startLine) {
+      const line = document.lineAt(scan).text.trim();
+      if (
+        line === "" ||
+        line.startsWith("/**") ||
+        line.startsWith("*") ||
+        line.startsWith("//") ||
+        line.startsWith("#") ||
+        line.startsWith("/*")
+      ) {
+        scan++;
+        continue;
+      }
+      break;
+    }
+    let insertLine = topDocStart + 1;
+    let firstNonBlank = scan;
+    while (
+      firstNonBlank < block.startLine &&
+      document.lineAt(firstNonBlank).text.trim() === ""
+    ) {
+      firstNonBlank++;
+    }
+    // --- Ensure exactly one empty line before docblock unless previous non-blank line is an opening brace ---
+    let linesToRemove = 0;
+    for (let i = insertLine - 1; i >= 0; i--) {
+      const lineText = document.lineAt(i).text.trim();
+      if (lineText === "") {
+        linesToRemove++;
+      } else {
+        break;
+      }
+    }
+    let replaceStart = insertLine - linesToRemove;
+    if (replaceStart < 0) replaceStart = 0;
+    // Find the previous non-blank line before docblock
+    let prevNonBlankLine = replaceStart - 1;
+    while (
+      prevNonBlankLine >= 0 &&
+      document.lineAt(prevNonBlankLine).text.trim() === ""
+    ) {
+      prevNonBlankLine--;
+    }
+    const prevNonBlankText =
+      prevNonBlankLine >= 0
+        ? document.lineAt(prevNonBlankLine).text.trim()
+        : "";
+    const replaceRange = new vscode.Range(
+      new vscode.Position(replaceStart, 0),
+      new vscode.Position(firstNonBlank, 0)
+    );
+    let insertText = docblock.join("\n") + "\n";
+    // Only add one empty line if needed (not after an opening brace)
+    if (prevNonBlankText !== "{" && replaceStart > 0) {
+      insertText = "\n" + insertText;
+    }
+    edits.push({ range: replaceRange, text: insertText });
+  }
+  // --- Apply all edits synchronously ---
+  await editor.edit((editBuilder) => {
+    for (const edit of edits) {
+      editBuilder.replace(edit.range, edit.text);
     }
   });
 }
@@ -542,6 +668,7 @@ async function generateDocblocksRecursive({
   settingsDescriptions = {},
   skipSettings = false,
   recurse = true,
+  visited = undefined,
 }: {
   document: vscode.TextDocument;
   editBuilder: vscode.TextEditorEdit;
@@ -549,7 +676,13 @@ async function generateDocblocksRecursive({
   settingsDescriptions?: Record<string, string>;
   skipSettings?: boolean;
   recurse?: boolean;
+  visited?: Set<string>;
 }) {
+  if (!visited) visited = new Set<string>();
+  const blockKey = `${block.type}:${block.startLine}`;
+  if (visited.has(blockKey)) return;
+  visited.add(blockKey);
+
   const lines = document.getText().split("\n");
   const padding = lines[block.startLine].match(/^[\s]*/)?.[0] ?? "";
 
@@ -929,7 +1062,7 @@ async function generateDocblocksRecursive({
     editBuilder.replace(replaceRange, "\n" + docblock.join("\n") + "\n");
   }
   // --- Recurse into children blocks ---
-  if (block.children && block.children.length > 0) {
+  if (recurse && block.children && block.children.length > 0) {
     for (const child of block.children) {
       await generateDocblocksRecursive({
         document,
@@ -938,6 +1071,7 @@ async function generateDocblocksRecursive({
         settingsDescriptions,
         skipSettings,
         recurse,
+        visited,
       });
     }
   }
