@@ -121,19 +121,28 @@ export async function generatePHPDocForFile() {
   if (allSettings.size > 0) {
     settingsDescriptions = await ensureSettingsCache(Array.from(allSettings));
   }
-  await editor.edit(async (editBuilder) => {
-    // Only process top-level blocks (no parent), recursion will handle all children
-    for (const block of blocks) {
-      if (!block.parent) {
-        await generateDocblocksRecursive({
-          document,
-          editBuilder,
-          block,
-          settingsDescriptions,
-          skipSettings: !!settingsDescriptions.__SKIP_SETTINGS,
-          recurse: true,
-        });
+  // Recursively walk all blocks and generate docblocks for each
+  function walkAndGenerate(
+    block: PHPBlock,
+    editBuilder: vscode.TextEditorEdit
+  ) {
+    generateDocblocksRecursive({
+      document,
+      editBuilder,
+      block,
+      settingsDescriptions,
+      skipSettings: !!settingsDescriptions.__SKIP_SETTINGS,
+      recurse: false,
+    });
+    if (block.children && block.children.length > 0) {
+      for (const child of block.children) {
+        walkAndGenerate(child, editBuilder);
       }
+    }
+  }
+  await editor.edit(async (editBuilder) => {
+    for (const block of blocks) {
+      walkAndGenerate(block, editBuilder);
     }
   });
 }

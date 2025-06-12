@@ -1,20 +1,20 @@
 <?php
 
-function a()
+function outer()
 {
-    function b()
+    function inner()
     {
-        function e(int $a, string $b)
+        function deepNested(int $first, string $second)
         {
-            function f() {}
+            function mostInner() {}
 
             return [];
         }
     }
 
-    function c() {}
+    function anotherInner() {}
 
-    function d() {}
+    function oneMoreInner() {}
 }
 
 function add(float $a, string $b)
@@ -36,7 +36,9 @@ class OrderProcessor
     public int $orderId3 = 3;
 
     public function deleteUser(int $userId) {}
+
     public function addUser(int $userId) {}
+
     protected function updateUser(int $userId) {}
 }
 
