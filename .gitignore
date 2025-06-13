@@ -25,4 +25,7 @@ logs/
 
 # Ignore build output folders
 /dist/
-/out/
+/out/vendor/
+
+# Ignore PHP vendor dependencies
+vendor/

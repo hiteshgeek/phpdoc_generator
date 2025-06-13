@@ -21,9 +21,7 @@ export function getDBConfigFromVSCode(): {
   database: string;
   dbLicid: string;
 } {
-  const config = vscode.workspace.getConfiguration(
-    "phpdoc-generator-hiteshgeek"
-  );
+  const config = vscode.workspace.getConfiguration("phpdocGenerator");
   console.log("VS Code Config:", JSON.stringify(config));
   return {
     host: config.get<string>("dbHost") || "",
