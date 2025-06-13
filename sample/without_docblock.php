@@ -102,7 +102,6 @@ function add(float $a, string $b)
     return intval($a + $b);
 }
 
-
 /**
  * class OrderProcessor
  */
