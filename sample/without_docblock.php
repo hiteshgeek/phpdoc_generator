@@ -80,8 +80,6 @@ function add(float $a, string $b)
 
 /**
  * class OrderProcessor
- *
- * @return mixed
  */
 class OrderProcessor
 {
@@ -114,7 +112,6 @@ class OrderProcessor
      */
     public function deleteUser(int $userId) {}
 
-
     /**
      * function addUser
      *
@@ -138,7 +135,6 @@ class OrderProcessor
     protected function updateUser(int $userId) {}
 }
 
-
 /**
  * function notifyUser
  *
@@ -153,7 +149,6 @@ class OrderProcessor
  */
 function notifyUser(string $email, int $orderId): bool {}
 
-
 /**
  * function getUser
  *
@@ -167,8 +162,6 @@ function getUser($id): ?string {}
 
 /**
  * trait LogsActivity
- *
- * @return mixed
  */
 trait LogsActivity {}
 
@@ -190,8 +183,6 @@ const DEFAULT_TAX = 0.18;
 
 /**
  * interface Cacheable
- *
- * @return mixed
  */
 interface Cacheable
 {
@@ -206,7 +197,6 @@ interface Cacheable
      */
     public function getCacheKey(): string;
 }
-
 
 /**
  * function generateReport
@@ -232,8 +222,6 @@ function updatePrices(array $prices): void {}
 
 /**
  * class User
- *
- * @return mixed
  */
 class User extends Model
 {
@@ -246,7 +234,6 @@ class User extends Model
      */
     public function store(Request $request): void {}
 
-
     /**
      * function testUserCreation
      *
@@ -258,7 +245,6 @@ class User extends Model
      */
     public function testUserCreation(): void {}
 }
-
 
 /**
  * function calculateEmi

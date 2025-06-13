@@ -166,43 +166,44 @@ export async function generatePHPDocForFile() {
     let docblock: string[] = [];
 
     // --- Extract and parse existing docblock (if any) ---
-    let fileDocStartForBlock = block.startLine - 1;
-    let fileDocEndForBlock = fileDocStartForBlock;
-    let fileHasDocForBlock = false;
-    while (fileDocStartForBlock >= 0) {
-      const line = document.lineAt(fileDocStartForBlock).text.trim();
+    // Extract and parse existing docblock (if any) for the current block
+    let docStartForBlock = block.startLine - 1;
+    let docEndForBlock = docStartForBlock;
+    let hasDocForBlock = false;
+    while (docStartForBlock >= 0) {
+      const line = document.lineAt(docStartForBlock).text.trim();
       if (line === "") {
-        fileDocStartForBlock--;
-        fileDocEndForBlock--;
+        docStartForBlock--;
+        docEndForBlock--;
         continue;
       }
       if (line.startsWith("/**")) {
-        fileHasDocForBlock = true;
+        hasDocForBlock = true;
         break;
       }
       if (!line.startsWith("*") && !line.startsWith("//")) break;
-      fileDocStartForBlock--;
-      fileDocEndForBlock--;
+      docStartForBlock--;
+      docEndForBlock--;
     }
-    if (fileHasDocForBlock) {
-      fileDocEndForBlock = fileDocStartForBlock;
-      while (fileDocEndForBlock < block.startLine) {
-        const line = document.lineAt(fileDocEndForBlock).text.trim();
+    if (hasDocForBlock) {
+      docEndForBlock = docStartForBlock;
+      while (docEndForBlock < block.startLine) {
+        const line = document.lineAt(docEndForBlock).text.trim();
         if (
           line.startsWith("//") ||
           line.startsWith("#") ||
           line.startsWith("/*")
         ) {
-          fileDocEndForBlock++;
+          docEndForBlock++;
           continue;
         }
         if (line.includes("*/")) break;
-        fileDocEndForBlock++;
+        docEndForBlock++;
       }
     }
-    if (fileHasDocForBlock) {
+    if (hasDocForBlock) {
       const docblockLines = [];
-      for (let i = fileDocStartForBlock; i <= fileDocEndForBlock; i++) {
+      for (let i = docStartForBlock; i <= docEndForBlock; i++) {
         docblockLines.push(document.lineAt(i).text);
       }
       oldDoc = parseDocblock(docblockLines);
@@ -329,41 +330,46 @@ export async function generatePHPDocForFile() {
     ) {
       firstNonBlankForFile++;
     }
-    // --- Ensure exactly one empty line before docblock unless previous non-blank line is an opening brace or '<?php' ---
-    // Remove all blank lines before docblock
-    let insertLine = block.startLine;
+    // --- Ensure exactly one empty line before docblock unless previous non-blank line is '{' or '<?php' ---
+    // Aggressively remove all blank lines above the docblock
+    // Aggressively remove all blank lines above the docblock (for both new and existing)
+    let replaceStart = foundDocblock ? topDocStartForFile : block.startLine;
     while (
-      insertLine > 0 &&
-      document.lineAt(insertLine - 1).text.trim() === ""
+      replaceStart > 0 &&
+      document.lineAt(replaceStart - 1).text.trim() === ""
     ) {
-      insertLine--;
+      replaceStart--;
     }
-    // Find the previous non-blank line
-    let prevLineIdx = insertLine - 1;
-    let prevLineText =
-      prevLineIdx >= 0 ? document.lineAt(prevLineIdx).text.trim() : "";
-    const needsBlankLine =
-      prevLineText !== "{" && prevLineText !== "<?php" && insertLine > 0;
-    // Set the correct replacement range: if foundDocblock, replace the old docblock; else, insert as usual
-    const replaceRangeForFile = foundDocblock
-      ? new vscode.Range(
-          new vscode.Position(topDocStartForFile, 0),
-          new vscode.Position(firstNonBlankForFile, 0)
-        )
-      : new vscode.Range(
-          new vscode.Position(insertLine, 0),
-          new vscode.Position(firstNonBlankForFile, 0)
-        );
-    // Avoid adding extra blank lines if one already exists before the docblock
+    // Find the end of the blank line region after the insertion point
+    let replaceEnd = block.startLine;
+    while (
+      replaceEnd < document.lineCount &&
+      document.lineAt(replaceEnd).text.trim() === ""
+    ) {
+      replaceEnd++;
+    }
+    // After blank line removal, check the line above
+    let lineAboveIdx = replaceStart - 1;
+    let lineAboveText =
+      lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
     let insertTextForFile = docblock.join("\n") + "\n";
+    // Only add a blank line if the line above is not blank, '{', or '<?php'
     if (
-      !foundDocblock &&
-      needsBlankLine &&
-      (insertLine === 0 || document.lineAt(insertLine - 1).text.trim() !== "")
+      lineAboveText !== "" &&
+      lineAboveText !== "{" &&
+      lineAboveText !== "<?php"
     ) {
       insertTextForFile = "\n" + insertTextForFile;
     }
-    edits.push({ range: replaceRangeForFile, text: insertTextForFile });
+    // Always use replaceStart for the start of the replacement range
+    const replaceRangeForFile = new vscode.Range(
+      new vscode.Position(replaceStart, 0),
+      new vscode.Position(foundDocblock ? firstNonBlankForFile : replaceEnd, 0)
+    );
+    edits.push({
+      range: replaceRangeForFile,
+      text: insertTextForFile,
+    });
   }
   // --- Apply all edits synchronously ---
   await editor.edit((editBuilder: vscode.TextEditorEdit) => {
@@ -662,33 +668,35 @@ function findBlockForCursor(
   line: number,
   document: vscode.TextDocument
 ): PHPBlock | undefined {
-  let found: PHPBlock | undefined;
+  let innermost: PHPBlock | undefined;
   function search(blockList: PHPBlock[]) {
     for (const block of blockList) {
       if (line >= block.startLine && line <= block.endLine) {
-        found = block;
+        // Always prefer the innermost block
         if (block.children && block.children.length > 0) {
           search(block.children);
+        }
+        if (!innermost || block.startLine >= (innermost?.startLine ?? -1)) {
+          innermost = block;
         }
       }
     }
   }
   search(blocks);
-  if (found) {
+  if (innermost) {
     // If the found block is a property, return its parent class instead
     if (
-      found.type === "property" &&
-      found.parent &&
-      found.parent.type === "class"
+      innermost.type === "property" &&
+      innermost.parent &&
+      innermost.parent.type === "class"
     ) {
-      return found.parent;
+      return innermost.parent;
     }
-    return found;
+    return innermost;
   }
-
   // --- Enhanced: If cursor is in docblock above a block, return that block ---
   // Scan upwards from cursor to find docblock start
-  let docStart = line;
+  let docStart = line - 1;
   let foundDocStart = false;
   while (docStart >= 0) {
     const docLine = document.lineAt(docStart).text.trim();
@@ -738,27 +746,45 @@ function findBlockForCursor(
         blockLine++;
         continue;
       }
-      // Try to find a block that starts at this line
+      // Only match if the block starts exactly at this line
       function findBlockAtLine(blockList: PHPBlock[]): PHPBlock | undefined {
+        let innermost: PHPBlock | undefined;
         for (const block of blockList) {
-          if (block.startLine === blockLine) return block;
-          if (block.children && block.children.length > 0) {
+          if (block.startLine === blockLine) {
+            // Prefer the deepest (innermost) block at this line
+            if (block.children && block.children.length > 0) {
+              const child = findBlockAtLine(block.children);
+              if (child) {
+                if (
+                  !innermost ||
+                  child.startLine > (innermost?.startLine ?? -1)
+                ) {
+                  innermost = child;
+                }
+              }
+            }
+            if (!innermost || block.startLine > (innermost?.startLine ?? -1)) {
+              innermost = block;
+            }
+          } else if (block.children && block.children.length > 0) {
             const child = findBlockAtLine(block.children);
-            if (child) return child;
+            if (child) {
+              if (
+                !innermost ||
+                child.startLine > (innermost?.startLine ?? -1)
+              ) {
+                innermost = child;
+              }
+            }
           }
         }
-        return undefined;
+        return innermost;
       }
-      const block = findBlockAtLine(blocks);
-      if (block) return block;
-      break;
-    }
-  }
-  // Fallback: check children recursively
-  for (const block of blocks) {
-    if (block.children && block.children.length > 0) {
-      const child = findBlockForCursor(block.children, line, document);
-      if (child) return child;
+      const foundBlock = findBlockAtLine(blocks);
+      if (foundBlock) {
+        return foundBlock;
+      }
+      blockLine++;
     }
   }
   return undefined;
@@ -794,6 +820,48 @@ async function generateDocblocksRecursive({
   const lines = document.getText().split("\n");
   const padding = lines[block.startLine].match(/^[\s]*/)?.[0] ?? "";
 
+  // --- Extract and parse existing docblock (if any) for the current block ---
+  let docStartForBlock = block.startLine - 1;
+  let docEndForBlock = docStartForBlock;
+  let hasDocForBlock = false;
+  while (docStartForBlock >= 0) {
+    const line = document.lineAt(docStartForBlock).text.trim();
+    if (line === "") {
+      docStartForBlock--;
+      docEndForBlock--;
+      continue;
+    }
+    if (line.startsWith("/**")) {
+      hasDocForBlock = true;
+      break;
+    }
+    if (!line.startsWith("*") && !line.startsWith("//")) break;
+    docStartForBlock--;
+    docEndForBlock--;
+  }
+  if (hasDocForBlock) {
+    docEndForBlock = docStartForBlock;
+    while (docEndForBlock < block.startLine) {
+      const line = document.lineAt(docEndForBlock).text.trim();
+      if (
+        line.startsWith("//") ||
+        line.startsWith("#") ||
+        line.startsWith("/*")
+      ) {
+        docEndForBlock++;
+        continue;
+      }
+      if (line.includes("*/")) break;
+      docEndForBlock++;
+    }
+  }
+  if (hasDocForBlock) {
+    const docblockLines = [];
+    for (let i = docStartForBlock; i <= docEndForBlock; i++) {
+      docblockLines.push(document.lineAt(i).text);
+    }
+    oldDoc = parseDocblock(docblockLines);
+  }
   // --- Return Type Inference if not explicitly provided ---
   let returnType = block.returnType;
   if (block.type === "function" && (!returnType || returnType === "void")) {
@@ -840,8 +908,9 @@ async function generateDocblocksRecursive({
     name: block.name,
     type: block.type,
     lines: [],
-    preservedTags: oldDoc.preservedTags,
-    otherTags: oldDoc.otherTags,
+    summary: oldDoc.summary, // always use parsed summary
+    preservedTags: oldDoc.preservedTags || [], // always use parsed preservedTags
+    otherTags: oldDoc.otherTags || [], // always use parsed otherTags
   };
   docblock = buildDocblock({ ...updated, padding });
   // Find where to insert/replace docblock
@@ -890,40 +959,42 @@ async function generateDocblocksRecursive({
   ) {
     firstNonBlankForFile++;
   }
-  // --- Ensure exactly one empty line before docblock unless previous non-blank line is an opening brace or '<?php' ---
-  // Remove all blank lines before docblock
-  let insertLine = block.startLine;
-  while (insertLine > 0 && document.lineAt(insertLine - 1).text.trim() === "") {
-    insertLine--;
+  // --- Ensure exactly one empty line before docblock unless previous non-blank line is '{' or '<?php' ---
+  // Aggressively remove all blank lines above the docblock
+  // Aggressively remove all blank lines above the docblock (for both new and existing)
+  let replaceStart = foundDocblock ? topDocStartForFile : block.startLine;
+  while (
+    replaceStart > 0 &&
+    document.lineAt(replaceStart - 1).text.trim() === ""
+  ) {
+    replaceStart--;
   }
-  // Find the previous non-blank line
-  let prevLineIdx = insertLine - 1;
-  let prevLineText =
-    prevLineIdx >= 0 ? document.lineAt(prevLineIdx).text.trim() : "";
-  const needsBlankLine =
-    prevLineText !== "{" && prevLineText !== "<?php" && insertLine > 0;
-  // Set the correct replacement range: if foundDocblock, replace the old docblock; else, insert as usual
-  const replaceRangeForFile = foundDocblock
-    ? new vscode.Range(
-        new vscode.Position(topDocStartForFile, 0),
-        new vscode.Position(firstNonBlankForFile, 0)
-      )
-    : new vscode.Range(
-        new vscode.Position(insertLine, 0),
-        new vscode.Position(firstNonBlankForFile, 0)
-      );
-  // Avoid adding extra blank lines if one already exists before the docblock
+  // Find the end of the blank line region after the insertion point
+  let replaceEnd = block.startLine;
+  while (
+    replaceEnd < document.lineCount &&
+    document.lineAt(replaceEnd).text.trim() === ""
+  ) {
+    replaceEnd++;
+  }
+  // After blank line removal, check the line above
+  let lineAboveIdx = replaceStart - 1;
+  let lineAboveText =
+    lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
   let insertTextForFile = docblock.join("\n") + "\n";
+  // Only add a blank line if the line above is not blank, '{', or '<?php'
   if (
-    !foundDocblock &&
-    needsBlankLine &&
-    (insertLine === 0 || document.lineAt(insertLine - 1).text.trim() !== "")
+    lineAboveText !== "" &&
+    lineAboveText !== "{" &&
+    lineAboveText !== "<?php"
   ) {
     insertTextForFile = "\n" + insertTextForFile;
   }
-  // edits.push({ range: replaceRangeForFile, text: insertTextForFile });
-  // Do not call editBuilder.replace here; only collect edits
-  // Actually insert or update the docblock in the editor
+  // Always use replaceStart for the start of the replacement range
+  const replaceRangeForFile = new vscode.Range(
+    new vscode.Position(replaceStart, 0),
+    new vscode.Position(foundDocblock ? firstNonBlankForFile : replaceEnd, 0)
+  );
   editBuilder.replace(replaceRangeForFile, insertTextForFile);
   if (recurse && block.children && block.children.length > 0) {
     for (const child of block.children) {

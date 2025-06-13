@@ -130,8 +130,11 @@ export function buildDocblock({
 
   // --- 5. Return group ---
   let returnLine: string | undefined = undefined;
-  // Always add @return for functions, even if void
-  if (typeof returnType !== "undefined") {
+  // Only add @return for functions and methods
+  if (
+    (type === "function" || type === "method") &&
+    typeof returnType !== "undefined"
+  ) {
     let desc = "";
     for (const tag of returnTags) {
       const match = tag.match(/@return\s+[^\s]+\s*(.*)/);
@@ -141,7 +144,7 @@ export function buildDocblock({
       }
     }
     returnLine = pad + ` * @return ${returnType}${desc ? " " + desc : ""}`;
-  } else if (type === "function") {
+  } else if (type === "function" || type === "method") {
     // If no returnType is provided, default to void
     returnLine = pad + " * @return void";
   }
@@ -166,10 +169,16 @@ export function buildDocblock({
   if (customTagsGroup.length > 0) groups.push(customTagsGroup);
 
   let docblockLines: string[] = [pad + "/**"];
+  let lastWasBlank = false;
   for (let i = 0; i < groups.length; i++) {
     if (groups[i].length > 0) {
-      if (docblockLines.length > 1) docblockLines.push(pad + " *");
+      // Only add a blank line if the previous group was not blank
+      if (docblockLines.length > 1 && !lastWasBlank) {
+        docblockLines.push(pad + " *");
+        lastWasBlank = true;
+      }
       docblockLines.push(...groups[i]);
+      lastWasBlank = false;
     }
   }
   // Remove any accidental or stray closing lines before adding the final '*/'
@@ -211,6 +220,7 @@ export function updateDocblock(
     returnDesc: old.returnDesc,
     settings: old.settings,
     otherTags: old.otherTags,
+    preservedTags: old.preservedTags, // <-- ensure preservedTags are preserved
   };
 }
 
