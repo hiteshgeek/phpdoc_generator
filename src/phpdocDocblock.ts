@@ -28,6 +28,7 @@ export function buildDocblock({
   otherTags = [],
   preservedTags = [],
   padding = 0,
+  settingsDescriptions = {}, // <-- add this
 }: DocblockInfo & {
   name?: string;
   settings?: string[];
@@ -35,6 +36,7 @@ export function buildDocblock({
   otherTags?: string[];
   preservedTags?: string[];
   padding?: number | string;
+  settingsDescriptions?: Record<string, string>; // <-- add this
 }): string[] {
   const pad =
     typeof padding === "string"
@@ -213,7 +215,17 @@ export function buildDocblock({
     }
   }
 
-  // --- 7. Assemble docblock with blank lines between groups ---
+  // --- 7. Settings tag group (always last if present) ---
+  const settingsTagGroup: string[] = [];
+  if (settings && settings.length > 0 && settingsDescriptions) {
+    settingsTagGroup.push(pad + " * @settings");
+    for (const key of settings) {
+      const desc = settingsDescriptions[key] || "";
+      settingsTagGroup.push(pad + ` * - ${key} : ${desc}`);
+    }
+  }
+
+  // --- 8. Assemble docblock with blank lines between groups ---
   const groups: string[][] = [];
   if (blockTypeGroup.length > 0) groups.push(blockTypeGroup);
   if (summaryGroup.length > 0) groups.push(summaryGroup);
@@ -221,6 +233,7 @@ export function buildDocblock({
   if (paramLines.length > 0) groups.push(paramLines);
   if (returnLine) groups.push([returnLine]);
   if (customTagsGroup.length > 0) groups.push(customTagsGroup);
+  if (settingsTagGroup.length > 0) groups.push(settingsTagGroup); // always last
 
   let docblockLines: string[] = [pad + "/**"];
   for (let i = 0; i < groups.length; i++) {

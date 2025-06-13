@@ -241,9 +241,7 @@ export async function generatePHPDocForFile() {
             else if (/^-?\d+$/.test(ret)) types.add("int");
             else if (/^".*"|'.*'$/.test(ret)) types.add("string");
             else {
-              const newClassMatch = ret.match(
-                /^new\s+([A-Za-z_][A-Za-z0-9_]*)/
-              );
+              const newClassMatch = ret.match(/^new\s+([A-Za-z_][A-ZaZ0-9_]*)/);
               if (newClassMatch) types.add(newClassMatch[1]);
               else types.add("mixed");
             }
@@ -252,6 +250,32 @@ export async function generatePHPDocForFile() {
             types.size > 0 ? Array.from(types).join("|") : "mixed";
         }
       }
+      // --- Collect settings for this block only, excluding children ---
+      let blockSettings: string[] = [];
+      // Get all child block line ranges
+      const childRanges = (block.children || []).map((child) => [
+        child.startLine,
+        child.endLine,
+      ]);
+      const funcLines: string[] = [];
+      for (let i = block.startLine; i <= block.endLine; i++) {
+        // Skip lines that are inside any child block
+        if (childRanges.some(([start, end]) => i >= start && i <= end))
+          continue;
+        funcLines.push(document.lineAt(i).text);
+      }
+      const funcTextForSettings = funcLines.join("\n");
+      const uncommented = funcTextForSettings
+        .replace(/\/\*.*?\*\//gs, "")
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("//"))
+        .join("\n");
+      const settingsMatches = [
+        ...uncommented.matchAll(/getSettings\(["'](.+?)["']\)/g),
+      ];
+      if (settingsMatches.length > 0) {
+        blockSettings = Array.from(new Set(settingsMatches.map((m) => m[1])));
+      }
       const updated = {
         ...updateDocblock(oldDoc, block.params || [], inferredReturnType),
         name: block.name,
@@ -259,6 +283,8 @@ export async function generatePHPDocForFile() {
         lines: [],
         preservedTags: oldDoc.preservedTags,
         otherTags: oldDoc.otherTags,
+        settings: blockSettings.length > 0 ? blockSettings : undefined,
+        settingsDescriptions,
       };
       docblock = buildDocblock({ ...updated, padding });
     } else if (block.type === "property") {
@@ -877,14 +903,42 @@ async function generateDocblocksRecursive({
       returnType = types.size > 0 ? Array.from(types).join("|") : "mixed";
     }
   }
+  // --- Collect settings for this block only, excluding children ---
+  let blockSettings: string[] = [];
+  if (block.type === "function") {
+    // Get all child block line ranges
+    const childRanges = (block.children || []).map((child) => [
+      child.startLine,
+      child.endLine,
+    ]);
+    const funcLines: string[] = [];
+    for (let i = block.startLine; i <= block.endLine; i++) {
+      // Skip lines that are inside any child block
+      if (childRanges.some(([start, end]) => i >= start && i <= end)) continue;
+      funcLines.push(document.lineAt(i).text);
+    }
+    const funcTextForSettings = funcLines.join("\n");
+    const uncommented = funcTextForSettings
+      .replace(/\/\*.*?\*\//gs, "")
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("//"))
+      .join("\n");
+    const settingsMatches = [
+      ...uncommented.matchAll(/getSettings\(["'](.+?)["']\)/g),
+    ];
+    if (settingsMatches.length > 0) {
+      blockSettings = Array.from(new Set(settingsMatches.map((m) => m[1])));
+    }
+  }
   const updated = {
     ...updateDocblock(oldDoc, block.params || [], returnType),
     name: block.name,
     type: block.type,
     lines: [],
-    summary: oldDoc.summary, // always use parsed summary
-    preservedTags: oldDoc.preservedTags || [], // always use parsed preservedTags
-    otherTags: oldDoc.otherTags || [], // always use parsed otherTags
+    preservedTags: oldDoc.preservedTags,
+    otherTags: oldDoc.otherTags,
+    settings: blockSettings.length > 0 ? blockSettings : undefined,
+    settingsDescriptions,
   };
   docblock = buildDocblock({ ...updated, padding });
   // Find where to insert/replace docblock
