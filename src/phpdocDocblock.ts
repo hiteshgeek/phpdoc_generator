@@ -222,20 +222,6 @@ export function buildDocblock({
   if (returnLine) groups.push([returnLine]);
   if (customTagsGroup.length > 0) groups.push(customTagsGroup);
 
-  // Debug: log the groups before merging
-  // eslint-disable-next-line no-console
-  console.log("[PHPDoc] blockTypeGroup:", blockTypeGroup);
-  // eslint-disable-next-line no-console
-  console.log("[PHPDoc] summaryGroup:", summaryGroup);
-  // eslint-disable-next-line no-console
-  console.log("[PHPDoc] knownTagsGroup:", knownTagsGroup);
-  // eslint-disable-next-line no-console
-  console.log("[PHPDoc] paramLines:", paramLines);
-  // eslint-disable-next-line no-console
-  console.log("[PHPDoc] returnLine:", returnLine);
-  // eslint-disable-next-line no-console
-  console.log("[PHPDoc] customTagsGroup:", customTagsGroup);
-
   let docblockLines: string[] = [pad + "/**"];
   for (let i = 0; i < groups.length; i++) {
     if (groups[i].length > 0) {

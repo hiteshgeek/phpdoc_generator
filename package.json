@@ -93,7 +93,7 @@
       "type": "object",
       "title": "PHPDoc Generator",
       "properties": {
-        "phpdoc-generator-hiteshgeek.exclude": {
+        "phpdocGenerator.exclude": {
           "type": "array",
           "items": {
             "type": "string"
@@ -106,41 +106,46 @@
           ],
           "description": "Glob patterns for folders and files to exclude from project-wide docblock generation. Follows the same format as 'files.exclude'."
         },
-        "phpdoc-generator-hiteshgeek.generateUpdateOnSave": {
+        "phpdocGenerator.generateUpdateOnSave": {
           "type": "boolean",
           "default": false,
           "description": "If enabled, the extension will automatically generate/update PHPDoc blocks for the entire file when any PHP file is saved.",
           "title": "Generate/Update on Save"
         },
-        "phpdoc-generator-hiteshgeek.dbHost": {
+        "phpdocGenerator.dbHost": {
           "type": "string",
           "default": "",
           "description": "MySQL database host for settings descriptions"
         },
-        "phpdoc-generator-hiteshgeek.dbPort": {
+        "phpdocGenerator.dbPort": {
           "type": "number",
           "default": 3306,
           "description": "MySQL database port"
         },
-        "phpdoc-generator-hiteshgeek.dbUser": {
+        "phpdocGenerator.dbUser": {
           "type": "string",
           "default": "",
           "description": "MySQL database user"
         },
-        "phpdoc-generator-hiteshgeek.dbPassword": {
+        "phpdocGenerator.dbPassword": {
           "type": "string",
           "default": "",
           "description": "MySQL database password"
         },
-        "phpdoc-generator-hiteshgeek.dbName": {
+        "phpdocGenerator.dbName": {
           "type": "string",
           "default": "",
           "description": "MySQL database name"
         },
-        "phpdoc-generator-hiteshgeek.dbLicid": {
+        "phpdocGenerator.dbLicid": {
           "type": "string",
           "default": "",
           "description": "LICID value for settings fetcher (if required)"
+        },
+        "phpdocGenerator.showStatusBarToggle": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the PHPDoc Generator: On Save status bar toggle."
         }
       }
     }

@@ -33,8 +33,8 @@ function updateStatusBarItem(
     if (context) context.subscriptions.push(statusBarItem);
   }
   statusBarItem.text = enabled
-    ? "$(check) PHPDoc: On Save"
-    : "$(circle-slash) PHPDoc: On Save";
+    ? "$(check) PHPDoc Generator: On Save"
+    : "$(circle-slash) PHPDoc Generator: On Save";
   statusBarItem.tooltip =
     "Toggle PHPDoc Generate/Update on Save (currently " +
     (enabled ? "Enabled" : "Disabled") +
@@ -52,24 +52,33 @@ export function activate(context: vscode.ExtensionContext) {
   registerFoldingProvider(context);
 
   // Status bar toggle for Generate/Update on Save
-  const config = vscode.workspace.getConfiguration(
-    "phpdoc-generator-hiteshgeek"
-  );
+  const config = vscode.workspace.getConfiguration("phpdocGenerator");
   let enabled = config.get<boolean>("generateUpdateOnSave", false);
-  updateStatusBarItem(enabled, context);
+  const showStatusBar = config.get<boolean>("showStatusBarToggle", true);
+  if (showStatusBar) {
+    updateStatusBarItem(enabled, context);
+  } else if (statusBarItem) {
+    statusBarItem.hide();
+  }
 
   // Listen for config changes to keep status bar in sync
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (
-        e.affectsConfiguration(
-          "phpdoc-generator-hiteshgeek.generateUpdateOnSave"
-        )
+        e.affectsConfiguration("phpdocGenerator.generateUpdateOnSave") ||
+        e.affectsConfiguration("phpdocGenerator.showStatusBarToggle")
       ) {
         enabled = vscode.workspace
-          .getConfiguration("phpdoc-generator-hiteshgeek")
+          .getConfiguration("phpdocGenerator")
           .get("generateUpdateOnSave", false);
-        updateStatusBarItem(enabled);
+        const showStatusBar = vscode.workspace
+          .getConfiguration("phpdocGenerator")
+          .get("showStatusBarToggle", true);
+        if (showStatusBar) {
+          updateStatusBarItem(enabled);
+        } else if (statusBarItem) {
+          statusBarItem.hide();
+        }
       }
     })
   );
@@ -79,9 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       "phpdoc-generator.toggleGenerateUpdateOnSave",
       async () => {
-        const config = vscode.workspace.getConfiguration(
-          "phpdoc-generator-hiteshgeek"
-        );
+        const config = vscode.workspace.getConfiguration("phpdocGenerator");
         const current = config.get<boolean>("generateUpdateOnSave", false);
         await config.update(
           "generateUpdateOnSave",
@@ -99,7 +106,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (
         document.languageId === "php" &&
         vscode.workspace
-          .getConfiguration("phpdoc-generator-hiteshgeek")
+          .getConfiguration("phpdocGenerator")
           .get("generateUpdateOnSave", false)
       ) {
         const editor = vscode.window.visibleTextEditors.find(

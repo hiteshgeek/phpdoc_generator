@@ -381,9 +381,7 @@ export async function generatePHPDocForFile() {
 }
 
 export async function generatePHPDocForProject() {
-  const config = vscode.workspace.getConfiguration(
-    "phpdoc-generator-hiteshgeek"
-  );
+  const config = vscode.workspace.getConfiguration("phpdocGenerator");
   const exclude: string[] = config.get("exclude", []);
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders) {
@@ -567,9 +565,7 @@ export async function generatePHPDocForProject() {
 
 export async function refreshSettingsCacheForAll() {
   const cachePath = path.resolve(__dirname, "../settings_cache.json");
-  const config = vscode.workspace.getConfiguration(
-    "phpdoc-generator-hiteshgeek"
-  );
+  const config = vscode.workspace.getConfiguration("phpdocGenerator");
   const dbHost = config.get<string>("dbHost") || "";
   const dbUser = config.get<string>("dbUser") || "";
   const dbPassword = config.get<string>("dbPassword") || "";

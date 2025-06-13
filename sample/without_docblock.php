@@ -7,11 +7,6 @@
  */
 function outer()
 {
-    /**
-     * function inner
-     *
-     * @return array
-     */
     function inner()
     {
         /**
