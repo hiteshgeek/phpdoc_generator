@@ -61,12 +61,25 @@ export function parseDocblock(lines: string[]): DocblockInfo {
       preservedTags.push(line); // preserve original whitespace
     } else if (inDesc && l && !l.startsWith("@")) {
       summaryLines.push(l.trim());
-    } else if (l.trim() === "" || (!l.startsWith("@") && !inDesc)) {
-      preservedTags.push(line); // preserve blank lines and unknown tags
+    }
+    // Do NOT preserve blank lines in preservedTags!
+  }
+  // Collapse multiple consecutive blank lines in summaryLines
+  let collapsedSummary: string[] = [];
+  let lastWasBlank = false;
+  for (const line of summaryLines) {
+    if (line.trim() === "") {
+      if (!lastWasBlank) {
+        collapsedSummary.push("");
+        lastWasBlank = true;
+      }
+    } else {
+      collapsedSummary.push(line);
+      lastWasBlank = false;
     }
   }
   return {
-    summary: summaryLines.join("\n"),
+    summary: collapsedSummary.join("\n"),
     params,
     returnType,
     returnDesc,

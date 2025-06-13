@@ -353,11 +353,12 @@ export async function generatePHPDocForFile() {
     let lineAboveText =
       lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
     let insertTextForFile = docblock.join("\n") + "\n";
-    // Only add a blank line if the line above is not blank, '{', or '<?php'
+    // Always add a blank line if the line above is '<?php' or if at the top of the file, but only if not already present
     if (
-      lineAboveText !== "" &&
-      lineAboveText !== "{" &&
-      lineAboveText !== "<?php"
+      (lineAboveText === "<?php" ||
+        replaceStart === 0 ||
+        (lineAboveText !== "" && lineAboveText !== "{")) &&
+      !insertTextForFile.startsWith("\n")
     ) {
       insertTextForFile = "\n" + insertTextForFile;
     }
@@ -668,35 +669,33 @@ function findBlockForCursor(
   line: number,
   document: vscode.TextDocument
 ): PHPBlock | undefined {
-  let innermost: PHPBlock | undefined;
+  let found: PHPBlock | undefined;
   function search(blockList: PHPBlock[]) {
     for (const block of blockList) {
       if (line >= block.startLine && line <= block.endLine) {
-        // Always prefer the innermost block
+        found = block;
         if (block.children && block.children.length > 0) {
           search(block.children);
-        }
-        if (!innermost || block.startLine >= (innermost?.startLine ?? -1)) {
-          innermost = block;
         }
       }
     }
   }
   search(blocks);
-  if (innermost) {
+  if (found) {
     // If the found block is a property, return its parent class instead
     if (
-      innermost.type === "property" &&
-      innermost.parent &&
-      innermost.parent.type === "class"
+      found.type === "property" &&
+      found.parent &&
+      found.parent.type === "class"
     ) {
-      return innermost.parent;
+      return found.parent;
     }
-    return innermost;
+    return found;
   }
-  // --- Enhanced: If cursor is in docblock above a block, return that block ---
+
+  // --- Enhanced: If cursor is in docblock above a block, return the innermost block at the next code line ---
   // Scan upwards from cursor to find docblock start
-  let docStart = line - 1;
+  let docStart = line;
   let foundDocStart = false;
   while (docStart >= 0) {
     const docLine = document.lineAt(docStart).text.trim();
@@ -708,11 +707,7 @@ function findBlockForCursor(
       docStart--;
       continue;
     }
-    if (docLine.startsWith("*")) {
-      docStart--;
-      continue;
-    }
-    break;
+    docStart--;
   }
   if (foundDocStart) {
     // Scan downwards to find docblock end (*/)
@@ -720,15 +715,7 @@ function findBlockForCursor(
     const totalLines = document.lineCount;
     while (docEnd < totalLines) {
       const docLine = document.lineAt(docEnd).text.trim();
-      if (
-        docLine.startsWith("//") ||
-        docLine.startsWith("#") ||
-        docLine.startsWith("/*")
-      ) {
-        docEnd++;
-        continue;
-      }
-      if (document.lineAt(docEnd).text.includes("*/")) {
+      if (docLine.includes("*/")) {
         break;
       }
       docEnd++;
@@ -746,45 +733,36 @@ function findBlockForCursor(
         blockLine++;
         continue;
       }
-      // Only match if the block starts exactly at this line
-      function findBlockAtLine(blockList: PHPBlock[]): PHPBlock | undefined {
-        let innermost: PHPBlock | undefined;
+      // Find the innermost block that starts at this line
+      function findInnermostBlockAtLine(
+        blockList: PHPBlock[]
+      ): PHPBlock | undefined {
+        let result: PHPBlock | undefined;
         for (const block of blockList) {
           if (block.startLine === blockLine) {
-            // Prefer the deepest (innermost) block at this line
-            if (block.children && block.children.length > 0) {
-              const child = findBlockAtLine(block.children);
-              if (child) {
-                if (
-                  !innermost ||
-                  child.startLine > (innermost?.startLine ?? -1)
-                ) {
-                  innermost = child;
-                }
-              }
-            }
-            if (!innermost || block.startLine > (innermost?.startLine ?? -1)) {
-              innermost = block;
-            }
+            // Check for deeper children
+            const child =
+              block.children && block.children.length > 0
+                ? findInnermostBlockAtLine(block.children)
+                : undefined;
+            result = child || block;
           } else if (block.children && block.children.length > 0) {
-            const child = findBlockAtLine(block.children);
-            if (child) {
-              if (
-                !innermost ||
-                child.startLine > (innermost?.startLine ?? -1)
-              ) {
-                innermost = child;
-              }
-            }
+            const child = findInnermostBlockAtLine(block.children);
+            if (child) result = child;
           }
         }
-        return innermost;
+        return result;
       }
-      const foundBlock = findBlockAtLine(blocks);
-      if (foundBlock) {
-        return foundBlock;
-      }
-      blockLine++;
+      const block = findInnermostBlockAtLine(blocks);
+      if (block) return block;
+      break;
+    }
+  }
+  // Fallback: check children recursively
+  for (const block of blocks) {
+    if (block.children && block.children.length > 0) {
+      const child = findBlockForCursor(block.children, line, document);
+      if (child) return child;
     }
   }
   return undefined;
@@ -982,11 +960,12 @@ async function generateDocblocksRecursive({
   let lineAboveText =
     lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
   let insertTextForFile = docblock.join("\n") + "\n";
-  // Only add a blank line if the line above is not blank, '{', or '<?php'
+  // Always add a blank line if the line above is '<?php' or if at the top of the file, but only if not already present
   if (
-    lineAboveText !== "" &&
-    lineAboveText !== "{" &&
-    lineAboveText !== "<?php"
+    (lineAboveText === "<?php" ||
+      replaceStart === 0 ||
+      (lineAboveText !== "" && lineAboveText !== "{")) &&
+    !insertTextForFile.startsWith("\n")
   ) {
     insertTextForFile = "\n" + insertTextForFile;
   }

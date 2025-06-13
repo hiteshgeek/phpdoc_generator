@@ -52,6 +52,30 @@ export function buildDocblock({
   let summaryLines: string[] = [];
   if (summary && summary.trim()) {
     summaryLines = summary.split("\n").map((l) => l.trim());
+    // Collapse multiple consecutive blank lines
+    let collapsed: string[] = [];
+    let lastWasBlank = false;
+    for (const line of summaryLines) {
+      if (line === "") {
+        if (!lastWasBlank) {
+          collapsed.push("");
+          lastWasBlank = true;
+        }
+      } else {
+        collapsed.push(line);
+        lastWasBlank = false;
+      }
+    }
+    summaryLines = collapsed;
+    // Remove any leading blank lines
+    while (summaryLines.length > 0 && summaryLines[0] === "")
+      summaryLines.shift();
+    // Remove any trailing blank lines
+    while (
+      summaryLines.length > 0 &&
+      summaryLines[summaryLines.length - 1] === ""
+    )
+      summaryLines.pop();
     // Remove any existing block type line from summary
     if (
       blockTypeLine &&
@@ -61,6 +85,24 @@ export function buildDocblock({
       summaryLines[0] = summaryLines[0].slice(blockTypeLine.length).trim();
       if (!summaryLines[0]) summaryLines.shift();
     }
+  }
+
+  // Normalize summary: collapse multiple blank lines
+  if (summary) {
+    summary =
+      summary
+        .split(/\r?\n/)
+        .reduce((acc: string[], line: string) => {
+          if (line.trim() === "") {
+            if (acc.length === 0 || acc[acc.length - 1] !== "") {
+              acc.push("");
+            }
+          } else {
+            acc.push(line);
+          }
+          return acc;
+        }, [])
+        .join("\n") || "";
   }
 
   // Parse preservedTags and otherTags, keeping order
@@ -89,8 +131,20 @@ export function buildDocblock({
 
   // --- 2. Summary group ---
   const summaryGroup: string[] = [];
+  let lastSummaryWasBlank = false;
   for (const line of summaryLines) {
-    if (line.trim() !== "") summaryGroup.push(pad + ` * ${line}`);
+    // Skip any accidental docblock closing lines in summary
+    const trimmed = line.trim();
+    if (trimmed === "*/" || trimmed === "* /" || trimmed === "/") continue;
+    if (trimmed === "") {
+      if (!lastSummaryWasBlank) {
+        summaryGroup.push(pad + " *");
+        lastSummaryWasBlank = true;
+      }
+    } else {
+      summaryGroup.push(pad + ` * ${line}`);
+      lastSummaryWasBlank = false;
+    }
   }
 
   // --- 3. Known tags group (author, version, since, etc.) ---
@@ -168,19 +222,39 @@ export function buildDocblock({
   if (returnLine) groups.push([returnLine]);
   if (customTagsGroup.length > 0) groups.push(customTagsGroup);
 
+  // Debug: log the groups before merging
+  // eslint-disable-next-line no-console
+  console.log("[PHPDoc] blockTypeGroup:", blockTypeGroup);
+  // eslint-disable-next-line no-console
+  console.log("[PHPDoc] summaryGroup:", summaryGroup);
+  // eslint-disable-next-line no-console
+  console.log("[PHPDoc] knownTagsGroup:", knownTagsGroup);
+  // eslint-disable-next-line no-console
+  console.log("[PHPDoc] paramLines:", paramLines);
+  // eslint-disable-next-line no-console
+  console.log("[PHPDoc] returnLine:", returnLine);
+  // eslint-disable-next-line no-console
+  console.log("[PHPDoc] customTagsGroup:", customTagsGroup);
+
   let docblockLines: string[] = [pad + "/**"];
-  let lastWasBlank = false;
   for (let i = 0; i < groups.length; i++) {
     if (groups[i].length > 0) {
-      // Only add a blank line if the previous group was not blank
-      if (docblockLines.length > 1 && !lastWasBlank) {
+      // Always add a blank line between groups (except after opening)
+      if (docblockLines.length > 1) {
         docblockLines.push(pad + " *");
-        lastWasBlank = true;
       }
       docblockLines.push(...groups[i]);
-      lastWasBlank = false;
     }
   }
+  // Collapse multiple consecutive blank lines (lines that are just ' *')
+  let collapsed: string[] = [];
+  let lastWasBlank = false;
+  for (const line of docblockLines) {
+    if (line.trim() === "*" && lastWasBlank) continue;
+    lastWasBlank = line.trim() === "*";
+    collapsed.push(line);
+  }
+  docblockLines = collapsed;
   // Remove any accidental or stray closing lines before adding the final '*/'
   docblockLines = docblockLines.filter((line, idx) => {
     const trimmed = line.trim();
@@ -213,18 +287,31 @@ export function updateDocblock(
   });
   // Always set returnType to 'mixed' if falsy
   const safeReturnType = returnType && returnType.trim() ? returnType : "mixed";
+  // Normalize summary: collapse multiple blank lines
+  const normalizedSummary = (old.summary || "")
+    .split(/\r?\n/)
+    .reduce((acc: string[], line: string) => {
+      if (line.trim() === "") {
+        if (acc.length === 0 || acc[acc.length - 1] !== "") {
+          acc.push("");
+        }
+      } else {
+        acc.push(line);
+      }
+      return acc;
+    }, [])
+    .join("\n");
   return {
-    summary: old.summary,
+    summary: normalizedSummary,
     params,
     returnType: safeReturnType,
     returnDesc: old.returnDesc,
     settings: old.settings,
     otherTags: old.otherTags,
-    preservedTags: old.preservedTags, // <-- ensure preservedTags are preserved
+    preservedTags: old.preservedTags,
   };
 }
 
-// Add: build property docblock
 export function buildPropertyDocblock({
   name,
   type,
