@@ -18,7 +18,7 @@ function autocorrectDocblockLines(lines: string[]): string[] {
 
 export function buildDocblock({
   summary,
-  params,
+  params = [],
   returnType,
   returnDesc,
   lines,
@@ -26,24 +26,16 @@ export function buildDocblock({
   settings,
   type,
   otherTags = [],
-  preservedTags = [], // <-- Added default for preservedTags
+  preservedTags = [],
   padding = 0,
 }: DocblockInfo & {
   name?: string;
   settings?: string[];
   type?: string;
   otherTags?: string[];
-  preservedTags?: string[]; // <-- Added type for preservedTags
-  padding?: number | string; // Accept string for whitespace
+  preservedTags?: string[];
+  padding?: number | string;
 }): string[] {
-  // DEBUG: Log the name and returnType used for docblock
-  if (name) {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[phpdocDocblock] buildDocblock for '${name}', returnType='${returnType}'`
-    );
-  }
-
   const pad =
     typeof padding === "string"
       ? padding
@@ -51,242 +43,153 @@ export function buildDocblock({
       ? " ".repeat(padding)
       : "";
 
-  // Helper to filter out any accidental or stray closing lines
-  function filterNoClosing(line: string) {
-    const trimmed = line.trim();
-    return trimmed !== "*/" && trimmed !== " */" && trimmed !== "* /";
-  }
+  // Canonical order for known tags
+  const canonicalKnownTagOrder = ["@author", "@version", "@since"];
 
-  // Build blockTypeLine with leading space to match expected format
-  const blockTypeLine =
-    type && name
-      ? ` * ${type} ${name}`
-      : name
-      ? ` * function ${name}`
-      : undefined;
-  const summaryLines = summary ? summary.split("\n") : [];
-  let blockTypeLineAdded = false;
-
-  if (summaryLines.length > 0 && name) {
-    const firstNonEmptyIdx = summaryLines.findIndex((l) => l.trim() !== "");
-    if (firstNonEmptyIdx !== -1) {
-      const firstLine = summaryLines[firstNonEmptyIdx];
-      const namePattern = name.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-      const typeNamePattern = type ? `${type}\\s*${namePattern}` : undefined;
-      const regexes = [
-        new RegExp(namePattern, "i"),
-        ...(typeNamePattern ? [new RegExp(typeNamePattern, "i")] : []),
-      ];
-      if (regexes.some((r) => r.test(firstLine))) {
-        summaryLines.splice(firstNonEmptyIdx, 1);
-      }
-    }
-  }
-
-  // Separate otherTags into throws and non-throws
-  const throwsTags = (otherTags || []).filter((tag) =>
-    tag.trim().startsWith("@throws")
-  );
-  const nonThrowsTags = (otherTags || []).filter(
-    (tag) => !tag.trim().startsWith("@throws")
-  );
-
-  // --- Grouped docblock construction for canonical blank lines ---
-  // REMOVE the old: const groups: string[][] = [];
-  // REMOVE all pushes to the old groups array here
-
-  // 1. Summary and block type line
-  const summaryGroup: string[] = [];
-  if (blockTypeLine && filterNoClosing(blockTypeLine))
-    summaryGroup.push(pad + blockTypeLine);
-  for (let i = 0; i < summaryLines.length; i++) {
-    if (i === 0 && summaryLines[0] === blockTypeLine && blockTypeLineAdded)
-      continue;
-    if (summaryLines[i].trim() !== "" && filterNoClosing(summaryLines[i]))
-      summaryGroup.push(pad + " * " + summaryLines[i]);
-  }
-
-  // 2. Settings and 3. Other tags (non-throws, non-canonical)
-  // --- Merge settings and other known tags into a single group, but always output @settings last ---
-  const canonicalKnownTagOrder = [
-    "@author",
-    "@version",
-    "@since",
-    // @settings intentionally omitted here
-  ];
-  const knownTagsRaw: {
-    tag: string;
-    line: string;
-    isSettingsBlock?: boolean;
-  }[] = [];
-  // Add other known tags (non-throws, non-canonical)
-  if (otherTags && otherTags.length > 0) {
-    for (const tag of otherTags) {
-      if (
-        !tag.trim().startsWith("@throws") &&
-        tag.trim() !== "" &&
-        filterNoClosing(tag)
-      ) {
-        const match = tag.match(/^@(\w+)/);
-        const tagName = match ? "@" + match[1] : "";
-        knownTagsRaw.push({ tag: tagName, line: pad + " * " + tag });
-      }
-    }
-  }
-  // Add @settings block and its items as a separate group (always last among known tags)
-  let settingsBlock: {
-    tag: string;
-    line: string;
-    isSettingsBlock?: boolean;
-  }[] = [];
-  if (settings && settings.length > 0) {
-    settingsBlock.push({
-      tag: "@settings",
-      line: pad + " * @settings",
-      isSettingsBlock: true,
-    });
-    for (const s of settings) {
-      if (filterNoClosing(s))
-        settingsBlock.push({
-          tag: "@settings",
-          line: pad + " * - " + s,
-          isSettingsBlock: true,
-        });
-    }
-  }
-  // Sort known tags canonically (excluding @settings), then append any unknowns at the end
-  const knownTagsGroup: string[] = [];
-  for (const canonicalTag of canonicalKnownTagOrder) {
-    for (const entry of knownTagsRaw) {
-      if (entry.tag === canonicalTag) knownTagsGroup.push(entry.line);
-    }
-  }
-  // Add any other known tags not in the canonical list and not @settings
-  for (const entry of knownTagsRaw) {
+  // Parse summary lines
+  let blockTypeLine =
+    type && name ? `${type} ${name}` : name ? `function ${name}` : undefined;
+  let summaryLines: string[] = [];
+  if (summary && summary.trim()) {
+    summaryLines = summary.split("\n").map((l) => l.trim());
+    // Remove any existing block type line from summary
     if (
-      !canonicalKnownTagOrder.includes(entry.tag) &&
-      entry.tag !== "@settings"
-    )
-      knownTagsGroup.push(entry.line);
-  }
-
-  // 4. Preserved tags (custom/unknown, not canonical)
-  const preservedGroup: string[] = [];
-  if (Array.isArray(preservedTags) && preservedTags.length > 0) {
-    for (const tagLine of preservedTags) {
-      const l = tagLine.replace(/^\s*\*\s?/, "");
-      if (
-        l.startsWith("@param") ||
-        l.startsWith("@throws") ||
-        l.startsWith("@return") ||
-        l.startsWith("@settings") ||
-        l.startsWith("@var")
-      ) {
-        continue; // skip canonical tags
-      }
-      if (l.trim() !== "" && filterNoClosing(l))
-        preservedGroup.push(pad + " * " + l);
-    }
-  }
-
-  // 5. Params
-  const paramsGroup: string[] = [];
-  if (params.length > 0) {
-    for (const p of params) {
-      const paramLine = `@param ${p.type ? p.type : "mixed"} $${p.name}${
-        p.desc ? " " + p.desc : ""
-      }`;
-      if (filterNoClosing(paramLine)) paramsGroup.push(pad + " * " + paramLine);
-    }
-  }
-
-  // 6. Throws
-  const throwsGroup: string[] = [];
-  if (throwsTags.length > 0) {
-    for (const tag of throwsTags) {
-      if (filterNoClosing(tag)) throwsGroup.push(pad + ` * ${tag}`);
-    }
-  }
-
-  // 7. Return
-  const returnGroup: string[] = [];
-  if (type === "function" || type === "method" || typeof type === "undefined") {
-    let effectiveReturnType = returnType;
-    if (
-      typeof effectiveReturnType !== "string" ||
-      effectiveReturnType.trim() === ""
+      blockTypeLine &&
+      summaryLines.length > 0 &&
+      summaryLines[0].toLowerCase().startsWith(blockTypeLine.toLowerCase())
     ) {
-      effectiveReturnType = "mixed";
+      summaryLines[0] = summaryLines[0].slice(blockTypeLine.length).trim();
+      if (!summaryLines[0]) summaryLines.shift();
     }
-    const returnLine = `@return ${effectiveReturnType}${
-      returnDesc ? " " + returnDesc : ""
-    }`;
-    if (filterNoClosing(returnLine)) returnGroup.push(pad + " * " + returnLine);
   }
 
-  // --- Group docblock sections in canonical order ---
-  const groups: string[][] = [];
-  if (summaryGroup.length > 0) groups.push(summaryGroup);
-  if (knownTagsGroup.length > 0) groups.push(knownTagsGroup); // all known tags together (author, version, since)
-  if (preservedGroup.length > 0) groups.push(preservedGroup); // custom/unknown tags
-  if (paramsGroup.length > 0) groups.push(paramsGroup);
-  if (throwsGroup.length > 0) groups.push(throwsGroup);
-  if (returnGroup.length > 0) groups.push(returnGroup);
-  // Settings block must always be last, after all other groups
-  if (settingsBlock.length > 0) {
-    // Add a blank line before settings if there are any previous groups
-    let settingsLines = settingsBlock.map((entry) => entry.line);
-    if (groups.length > 0) settingsLines.unshift(pad + " *");
-    groups.push(settingsLines);
+  // Parse preservedTags and otherTags, keeping order
+  const allTags = (preservedTags || []).concat(otherTags || []);
+  const paramTags: string[] = [];
+  const returnTags: string[] = [];
+  const knownTags: { tag: string; line: string }[] = [];
+  const customTags: string[] = [];
+  for (const tag of allTags) {
+    const l = tag.replace(/^\s*\*?\s?/, "");
+    if (l.startsWith("@param")) {
+      paramTags.push(l);
+    } else if (l.startsWith("@return")) {
+      returnTags.push(l);
+    } else if (canonicalKnownTagOrder.some((kt) => l.startsWith(kt))) {
+      const match = l.match(/^(@\w+)/);
+      knownTags.push({ tag: match ? match[1] : l, line: l });
+    } else if (l.trim() !== "") {
+      customTags.push(l);
+    }
   }
-  // --- Assemble final docblock ---
+
+  // --- 1. Block type line group ---
+  const blockTypeGroup: string[] = [];
+  if (blockTypeLine) blockTypeGroup.push(pad + ` * ${blockTypeLine}`);
+
+  // --- 2. Summary group ---
+  const summaryGroup: string[] = [];
+  for (const line of summaryLines) {
+    if (line.trim() !== "") summaryGroup.push(pad + ` * ${line}`);
+  }
+
+  // --- 3. Known tags group (author, version, since, etc.) ---
+  const knownTagsGroup: string[] = [];
+  const seenCanonical = new Set<string>();
+  for (const canonicalTag of canonicalKnownTagOrder) {
+    for (const entry of knownTags) {
+      if (entry.tag === canonicalTag && !seenCanonical.has(canonicalTag)) {
+        knownTagsGroup.push(pad + ` * ${entry.line}`);
+        seenCanonical.add(canonicalTag);
+      }
+    }
+  }
+
+  // --- 4. Param group ---
+  const paramLines: string[] = [];
+  if (params && params.length > 0) {
+    for (const p of params) {
+      let desc = "";
+      for (const tag of paramTags) {
+        const match = tag.match(
+          new RegExp(`@param\\s+[^\\s]+\\s+\\$${p.name}(\\s|$)(.*)`)
+        );
+        if (match) {
+          desc = match[2] ? match[2].trim() : "";
+          break;
+        }
+      }
+      paramLines.push(
+        pad +
+          ` * @param ${p.type ? p.type : "mixed"} $${p.name}${
+            desc ? " " + desc : ""
+          }`
+      );
+    }
+  }
+
+  // --- 5. Return group ---
+  let returnLine: string | undefined = undefined;
+  // Always add @return for functions, even if void
+  if (typeof returnType !== "undefined") {
+    let desc = "";
+    for (const tag of returnTags) {
+      const match = tag.match(/@return\s+[^\s]+\s*(.*)/);
+      if (match) {
+        desc = match[1] ? match[1].trim() : "";
+        break;
+      }
+    }
+    returnLine = pad + ` * @return ${returnType}${desc ? " " + desc : ""}`;
+  } else if (type === "function") {
+    // If no returnType is provided, default to void
+    returnLine = pad + " * @return void";
+  }
+
+  // --- 6. Custom tags group (preserved, not canonical) ---
+  const customTagsGroup: string[] = [];
+  const seenCustom = new Set<string>();
+  for (const line of customTags) {
+    if (!seenCustom.has(line)) {
+      customTagsGroup.push(pad + ` * ${line}`);
+      seenCustom.add(line);
+    }
+  }
+
+  // --- 7. Assemble docblock with blank lines between groups ---
+  const groups: string[][] = [];
+  if (blockTypeGroup.length > 0) groups.push(blockTypeGroup);
+  if (summaryGroup.length > 0) groups.push(summaryGroup);
+  if (knownTagsGroup.length > 0) groups.push(knownTagsGroup);
+  if (paramLines.length > 0) groups.push(paramLines);
+  if (returnLine) groups.push([returnLine]);
+  if (customTagsGroup.length > 0) groups.push(customTagsGroup);
+
   let docblockLines: string[] = [pad + "/**"];
   for (let i = 0; i < groups.length; i++) {
     if (groups[i].length > 0) {
-      // Add a blank line between groups, but not before the first group
       if (docblockLines.length > 1) docblockLines.push(pad + " *");
       docblockLines.push(...groups[i]);
     }
   }
-  // Always end with a single closing delimiter with proper space before */
-  if (
-    docblockLines[docblockLines.length - 1].trim() !== "*/" &&
-    docblockLines[docblockLines.length - 1].trim() !== " */"
-  ) {
-    docblockLines.push(pad + " */");
-  } else if (docblockLines[docblockLines.length - 1].trim() === "*/") {
-    docblockLines[docblockLines.length - 1] = pad + " */";
-  }
-  // Remove any duplicate or stray closing lines except the last
+  // Remove any accidental or stray closing lines before adding the final '*/'
   docblockLines = docblockLines.filter((line, idx) => {
     const trimmed = line.trim();
-    if (idx === 0 || idx === docblockLines.length - 1) return true;
-    return trimmed !== "*/" && trimmed !== "* /" && trimmed !== "/";
+    if (idx === 0) return true;
+    // Remove any line that is exactly '* /', '*/', or similar (except the last line)
+    return trimmed !== "* /" && trimmed !== "*/" && trimmed !== "/";
   });
-  // Remove only empty lines at the very start (after /**) and very end (before */)
-  while (docblockLines.length > 2 && docblockLines[1].trim() === "*")
-    docblockLines.splice(1, 1);
+  // Remove any trailing blank line (i.e., a line that is just ' *') before the closing */
   while (
-    docblockLines.length > 2 &&
-    docblockLines[docblockLines.length - 2].trim() === "*"
-  )
-    docblockLines.splice(docblockLines.length - 2, 1);
-  // Collapse multiple consecutive empty lines (" *") into a single one
-  let collapsed: string[] = [];
-  for (let i = 0; i < docblockLines.length; i++) {
-    if (
-      docblockLines[i].trim() === "*" &&
-      collapsed.length > 0 &&
-      collapsed[collapsed.length - 1].trim() === "*"
-    ) {
-      continue; // skip extra blank lines
-    }
-    collapsed.push(docblockLines[i]);
+    docblockLines.length > 1 &&
+    docblockLines[docblockLines.length - 1].trim() === "*"
+  ) {
+    docblockLines.pop();
   }
-  docblockLines = collapsed;
-  // Autocorrect docblock opening/closing lines before returning
-  docblockLines = autocorrectDocblockLines(docblockLines);
-  return docblockLines;
+  // Only one closing */
+  docblockLines.push(pad + " */");
+  // Always autocorrect before returning
+  return autocorrectDocblockLines(docblockLines);
 }
 
 export function updateDocblock(
