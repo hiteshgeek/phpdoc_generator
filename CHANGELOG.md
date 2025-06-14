@@ -1,5 +1,17 @@
 # Change Log
 
+## [1.0.0] - 2025-06-14
+
+### Added
+
+- **New setting: `showStatusBarToggle`** (default: true). Allows users to show or hide the status bar toggle for Generate/Update on Save.
+- **Status bar toggle visibility control:** The status bar toggle can now be hidden via settings for a cleaner UI.
+
+### Fixed
+
+- Preserving previous tags and descriptions
+- Generation of nested block's docblock
+
 ## [0.0.4] - 2025-06-10
 
 ### Added

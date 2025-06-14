@@ -29,10 +29,11 @@ See the [CHANGELOG.md](./CHANGELOG.md) for full details.
 
 - Parameter and return types are always provided in the docblock, even when not explicitly mentioned in the code (defaults to `mixed` or `void`).
 - **Project-wide docblock generation:** Command: `Generate PHPDoc for Entire Project`, Shortcut: `Ctrl+Alt+2`.
-- **Exclude patterns:** The `phpdoc-generator-hiteshgeek.exclude` setting allows you to specify folders and files to skip during project-wide docblock generation. The default exclude list is:
+- **Exclude patterns:** Provided setting to specify folders and files to skip during project-wide docblock generation. The default exclude list is:
   - `**/node_modules/**`
   - `**/vendor/**`
   - `**/.git/**`
+- **New setting: `showStatusBarToggle`** (default: true). Controls whether the status bar toggle for Generate/Update on Save is visible. If set to false, the status bar toggle will be hidden.
 - All improvements apply to both single-block, file, and entire-project docblock generation.
 
 ---
@@ -56,43 +57,32 @@ See the [CHANGELOG.md](./CHANGELOG.md) for full details.
 
 - **Cache Management** _(for Accrete Globus Technology only)_
 
-  - Automatically creates and populates `settings_cache.json` if missing or empty.
+  - Automatically populates settings cache if empty.
   - Command to manually refresh the settings cache from the database.
   - **Note:** Settings cache management is developed and applicable for Accrete Globus Technology (AGT) only.
 
-- **VS Code Integration**
-
-  - Command palette and keyboard shortcuts for:
-    - Generating/updating PHPDoc for the current block (`Ctrl+Alt+0`)
-    - Generating/updating PHPDoc for all blocks in the file (`Ctrl+Alt+1`)
-    - Generating/updating PHPDoc for the entire project (`Ctrl+Alt+2`)
-    - Collapse all docblocks in the file (`Ctrl+Alt+5`)
-    - Expand all docblocks in the file (`Ctrl+Alt+6`)
-    - Refreshing the settings cache (`Ctrl+Alt+7`) _(for Accrete Globus Technology only)_
-    - **Toggle Generate/Update on Save** (`Ctrl+Alt+9`)
-  - Status bar integration for quick access.
-
 - **Error Handling**
+
   - Docblock generation works even if the DB or cache is unavailable.
   - All file and DB operations are robust and fail gracefully.
+
+- Status bar integration for quick access.
 
 ---
 
 ## Commands & Shortcuts
 
-- Generate/update PHPDoc for the current block: `Ctrl+Alt+0`
-- Generate/update PHPDoc for all blocks in the file: `Ctrl+Alt+1`
-- Refresh the settings cache: `Ctrl+Alt+7`
-- **Collapse all docblocks in the file:** `Ctrl+Alt+5`
-- **Expand all docblocks in the file:** `Ctrl+Alt+6`
+You can use the following commands via keyboard shortcuts or by searching in the Command Palette (Ctrl+Shift+P):
 
-You can also access these commands from the Command Palette (Ctrl+Shift+P) by searching for:
-
-- "PHPDoc: Generate for Current Block"
-- "PHPDoc: Generate for File"
-- "PHPDoc: Refresh Settings Cache"
-- "PHPDoc: Expand All Docblocks"
-- "PHPDoc: Collapse All Docblocks"
+| Command Description                        | Shortcut   | Command Palette Name                   |
+| ------------------------------------------ | ---------- | -------------------------------------- |
+| Generate/update PHPDoc for current block   | Ctrl+Alt+0 | PHPDoc: Generate for Current Block     |
+| Generate/update PHPDoc for all blocks/file | Ctrl+Alt+1 | PHPDoc: Generate for File              |
+| Generate/update PHPDoc for entire project  | Ctrl+Alt+2 | PHPDoc: Generate for Entire Project    |
+| Collapse all docblocks in file             | Ctrl+Alt+5 | PHPDoc: Collapse All Docblocks         |
+| Expand all docblocks in file               | Ctrl+Alt+6 | PHPDoc: Expand All Docblocks           |
+| Refresh the settings cache                 | Ctrl+Alt+7 | PHPDoc: Refresh Settings Cache         |
+| Toggle Generate/Update on Save             | Ctrl+Alt+9 | PHPDoc: Toggle Generate/Update on Save |
 
 ---
 
