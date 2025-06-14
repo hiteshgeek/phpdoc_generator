@@ -249,20 +249,14 @@ export async function generatePHPDoc() {
     });
   }
   // Insert or replace docblock immediately
-  let replaceStart = block.startLine - 1;
-  while (replaceStart > 0 && lines[replaceStart - 1].trim() === "") {
-    replaceStart--;
-  }
-  let replaceEnd = block.startLine;
-  while (replaceEnd < lines.length && lines[replaceEnd].trim() === "") {
-    replaceEnd++;
-  }
-  const range = new vscode.Range(
-    new vscode.Position(replaceStart, 0),
-    new vscode.Position(replaceEnd, 0)
+  // Use the shared utility to get the correct replacement range and text
+  const { range, text: docblockText } = getDocblockReplaceRangeAndText(
+    document,
+    block,
+    docblock
   );
   await editor.edit((editBuilder: vscode.TextEditorEdit) => {
-    editBuilder.replace(range, docblock.join("\n") + "\n");
+    editBuilder.replace(range, docblockText);
   });
 }
 
@@ -411,7 +405,9 @@ export async function generatePHPDocForFile() {
             else if (/^-?\d+$/.test(ret)) types.add("int");
             else if (/^".*"|'.*'$/.test(ret)) types.add("string");
             else {
-              const newClassMatch = ret.match(/^new\s+([A-Za-z_][A-ZaZ0-9_]*)/);
+              const newClassMatch = ret.match(
+                /^new\s+([A-Za-z_][A-Za-z0-9_]*)/
+              );
               if (newClassMatch) types.add(newClassMatch[1]);
               else types.add("mixed");
             }
@@ -481,59 +477,43 @@ export async function generatePHPDocForFile() {
     }
     // Find where to insert/replace docblock
     let docStartForFile = block.startLine - 1;
-    let topDocStartForFile = docStartForFile;
     let foundDocblock = false;
-    while (topDocStartForFile >= 0) {
-      const line = document.lineAt(topDocStartForFile).text.trim();
+    // Scan upwards to find the start of an existing docblock (/**)
+    while (docStartForFile >= 0) {
+      const line = document.lineAt(docStartForFile).text.trim();
       if (line.startsWith("/**")) {
         foundDocblock = true;
         break;
       }
-      if (
-        line.startsWith("*") ||
-        line === "" ||
-        line.startsWith("//") ||
-        line.startsWith("#") ||
-        line.startsWith("/*")
-      ) {
-        topDocStartForFile--;
-        continue;
+      if (!line.startsWith("*") && !line.startsWith("//") && line !== "") break;
+      docStartForFile--;
+    }
+    // If found, scan down to the end of the docblock (*/)
+    let docEndForFile = docStartForFile;
+    if (foundDocblock) {
+      while (docEndForFile < document.lineCount) {
+        const line = document.lineAt(docEndForFile).text.trim();
+        if (line.includes("*/")) {
+          docEndForFile++;
+          break;
+        }
+        docEndForFile++;
       }
-      break;
+    } else {
+      // If not found, set to block.startLine
+      docStartForFile = block.startLine;
+      docEndForFile = block.startLine;
     }
-    let scanForFile = topDocStartForFile + 1;
-    while (scanForFile < block.startLine) {
-      const line = document.lineAt(scanForFile).text.trim();
-      if (
-        line === "" ||
-        line.startsWith("/**") ||
-        line.startsWith("*") ||
-        line.startsWith("//") ||
-        line.startsWith("#") ||
-        line.startsWith("/*")
-      ) {
-        scanForFile++;
-        continue;
-      }
-      break;
-    }
-    let insertLineForFile = topDocStartForFile + 1;
-    let firstNonBlankForFile = scanForFile;
-    while (
-      firstNonBlankForFile < block.startLine &&
-      document.lineAt(firstNonBlankForFile).text.trim() === ""
-    ) {
-      firstNonBlankForFile++;
-    }
-    // --- Ensure exactly one empty line before docblock unless previous non-blank line is '{' or '<?php' ---
-    let replaceStart = foundDocblock ? topDocStartForFile : block.startLine;
+    // Remove blank lines above docblock
+    let replaceStart = docStartForFile;
     while (
       replaceStart > 0 &&
       document.lineAt(replaceStart - 1).text.trim() === ""
     ) {
       replaceStart--;
     }
-    let replaceEnd = block.startLine;
+    // Remove blank lines after docblock (before code block)
+    let replaceEnd = docEndForFile;
     while (
       replaceEnd < document.lineCount &&
       document.lineAt(replaceEnd).text.trim() === ""
@@ -543,20 +523,13 @@ export async function generatePHPDocForFile() {
     let lineAboveIdx = replaceStart - 1;
     let lineAboveText =
       lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
-    let insertTextForFile = docblock.join("\n") + "\n";
-    if (
-      (lineAboveText === "<?php" ||
-        replaceStart === 0 ||
-        (lineAboveText !== "" && lineAboveText !== "{")) &&
-      !insertTextForFile.startsWith("\n")
-    ) {
-      insertTextForFile = "\n" + insertTextForFile;
-    }
-    const replaceRangeForFile = new vscode.Range(
-      new vscode.Position(replaceStart, 0),
-      new vscode.Position(foundDocblock ? firstNonBlankForFile : replaceEnd, 0)
+    // Use the shared utility to get the correct replacement range and text
+    const { range, text: insertTextForFile } = getDocblockReplaceRangeAndText(
+      document,
+      block,
+      docblock
     );
-    edits.push({ range: replaceRangeForFile, text: insertTextForFile });
+    edits.push({ range, text: insertTextForFile });
   }
   // Apply all edits in a single editor.edit call, bottom to top
   edits.sort((a, b) => b.range.start.line - a.range.start.line);
@@ -955,4 +928,76 @@ function findBlockForCursor(
     }
   }
   return undefined;
+}
+
+/**
+ * Utility: Find the correct range to replace for a docblock (existing or new)
+ * Returns { range, text } for use in editor.edit or WorkspaceEdit
+ */
+function getDocblockReplaceRangeAndText(
+  document: vscode.TextDocument,
+  block: PHPBlock,
+  docblock: string[]
+): { range: vscode.Range; text: string } {
+  let docStart = block.startLine - 1;
+  let foundDocblock = false;
+  // Scan upwards to find the start of an existing docblock (/**)
+  while (docStart >= 0) {
+    const line = document.lineAt(docStart).text.trim();
+    if (line.startsWith("/**")) {
+      foundDocblock = true;
+      break;
+    }
+    if (!line.startsWith("*") && !line.startsWith("//") && line !== "") break;
+    docStart--;
+  }
+  // If found, scan down to the end of the docblock (*/)
+  let docEnd = docStart;
+  if (foundDocblock) {
+    while (docEnd < document.lineCount) {
+      const line = document.lineAt(docEnd).text.trim();
+      if (line.includes("*/")) {
+        docEnd++;
+        break;
+      }
+      docEnd++;
+    }
+  } else {
+    // If not found, set to block.startLine
+    docStart = block.startLine;
+    docEnd = block.startLine;
+  }
+  // Remove blank lines above docblock
+  let replaceStart = docStart;
+  while (
+    replaceStart > 0 &&
+    document.lineAt(replaceStart - 1).text.trim() === ""
+  ) {
+    replaceStart--;
+  }
+  // Remove blank lines after docblock (before code block)
+  let replaceEnd = docEnd;
+  while (
+    replaceEnd < document.lineCount &&
+    document.lineAt(replaceEnd).text.trim() === ""
+  ) {
+    replaceEnd++;
+  }
+  let lineAboveIdx = replaceStart - 1;
+  let lineAboveText =
+    lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
+  let insertText = docblock.join("\n") + "\n";
+  if (
+    (lineAboveText === "<?php" ||
+      replaceStart === 0 ||
+      (lineAboveText !== "" && lineAboveText !== "{")) &&
+    !insertText.startsWith("\n")
+  ) {
+    insertText = "\n" + insertText;
+  }
+  const range = new vscode.Range(
+    new vscode.Position(replaceStart, 0),
+    new vscode.Position(replaceEnd, 0)
+  );
+  return { range, text: insertText };
 }
