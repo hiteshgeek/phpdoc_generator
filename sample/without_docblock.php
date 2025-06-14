@@ -73,8 +73,8 @@ function outer()
  * @settings
  * - test1 : 
  * - test : 
- * - IS_LEAD_CONTACT_PERSON : Is lead contact person required?
- * - IS_LEAD_INDUSTRY_TYPE : Want Industry Type in Lead
+ * - IS_LEAD_CONTACT_PERSON : 
+ * - IS_LEAD_INDUSTRY_TYPE : 
  */
 function add(float $a, string $b)
 {
@@ -102,38 +102,13 @@ function add(float $a, string $b)
     return intval($a + $b);
 }
 
-/**
- * class OrderProcessor
- */
 class OrderProcessor
 {
-    /**
-     * @var int
-     */
     private int $orderId;
-
-    /**
-     * @var int
-     */
     public int $orderId1;
-
-    /**
-     * @var int
-     */
     protected int $orderId2;
-
-    /**
-     * @var int
-     */
     public int $orderId3 = 3;
 
-    /**
-     * function deleteUser
-     *
-     * @param int $userId
-     *
-     * @return void
-     */
     public function deleteUser(int $userId) {}
 
     /**
@@ -143,19 +118,9 @@ class OrderProcessor
      *
      * @author Hitesh Vaghela
      *
-     * @param int $userId
-     *
-     * @return void
      */
     public function addUser(int $userId) {}
 
-    /**
-     * function updateUser
-     *
-     * @param int $userId
-     *
-     * @return void
-     */
     protected function updateUser(int $userId) {}
 }
 
@@ -213,9 +178,7 @@ interface Cacheable
     /**
      * function getCacheKey
      *
-     * Returns the cache key
-     *
-     * @version 2.0
+     * method getCacheKey
      *
      * @return string
      */
@@ -252,6 +215,8 @@ class User extends Model
     /**
      * function store
      *
+     * method store
+     *
      * @param Request $request
      *
      * @return void
@@ -261,9 +226,7 @@ class User extends Model
     /**
      * function testUserCreation
      *
-     * Test user creation logic
-     *
-     * @since 0.8.5
+     * method testUserCreation
      *
      * @return void
      */

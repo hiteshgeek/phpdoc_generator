@@ -240,94 +240,29 @@ export async function generatePHPDoc() {
       otherTags: oldDoc.otherTags,
     };
     docblock = buildDocblock({ ...updated, padding });
-  } else {
-    return;
+    // REMOVE: Do not generate docblocks for children here. Only process each block in the flattened list once.
+  } else if (block.type === "property") {
+    docblock = buildPropertyDocblock({
+      name: block.name,
+      type: block.returnType,
+      padding,
+    });
   }
-  // Find where to insert/replace docblock
-  let docStartForFile = block.startLine - 1;
-  let topDocStartForFile = docStartForFile;
-  let foundDocblock = false;
-  while (topDocStartForFile >= 0) {
-    const line = document.lineAt(topDocStartForFile).text.trim();
-    if (line.startsWith("/**")) {
-      foundDocblock = true;
-      break;
-    }
-    if (
-      line.startsWith("*") ||
-      line === "" ||
-      line.startsWith("//") ||
-      line.startsWith("#") ||
-      line.startsWith("/*")
-    ) {
-      topDocStartForFile--;
-      continue;
-    }
-    break;
-  }
-  let scanForFile = topDocStartForFile + 1;
-  while (scanForFile < block.startLine) {
-    const line = document.lineAt(scanForFile).text.trim();
-    if (
-      line === "" ||
-      line.startsWith("/**") ||
-      line.startsWith("*") ||
-      line.startsWith("//") ||
-      line.startsWith("#") ||
-      line.startsWith("/*")
-    ) {
-      scanForFile++;
-      continue;
-    }
-    break;
-  }
-  let insertLineForFile = topDocStartForFile + 1;
-  let firstNonBlankForFile = scanForFile;
-  while (
-    firstNonBlankForFile < block.startLine &&
-    document.lineAt(firstNonBlankForFile).text.trim() === ""
-  ) {
-    firstNonBlankForFile++;
-  }
-  // --- Ensure exactly one empty line before docblock unless previous non-blank line is '{' or '<?php' ---
-  // Aggressively remove all blank lines above the docblock
-  // Aggressively remove all blank lines above the docblock (for both new and existing)
-  let replaceStart = foundDocblock ? topDocStartForFile : block.startLine;
-  while (
-    replaceStart > 0 &&
-    document.lineAt(replaceStart - 1).text.trim() === ""
-  ) {
+  // Insert or replace docblock immediately
+  let replaceStart = block.startLine - 1;
+  while (replaceStart > 0 && lines[replaceStart - 1].trim() === "") {
     replaceStart--;
   }
-  // Find the end of the blank line region after the insertion point
   let replaceEnd = block.startLine;
-  while (
-    replaceEnd < document.lineCount &&
-    document.lineAt(replaceEnd).text.trim() === ""
-  ) {
+  while (replaceEnd < lines.length && lines[replaceEnd].trim() === "") {
     replaceEnd++;
   }
-  // After blank line removal, check the line above
-  let lineAboveIdx = replaceStart - 1;
-  let lineAboveText =
-    lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
-  let insertTextForFile = docblock.join("\n") + "\n";
-  // Always add a blank line if the line above is '<?php' or if at the top of the file, but only if not already present
-  if (
-    (lineAboveText === "<?php" ||
-      replaceStart === 0 ||
-      (lineAboveText !== "" && lineAboveText !== "{")) &&
-    !insertTextForFile.startsWith("\n")
-  ) {
-    insertTextForFile = "\n" + insertTextForFile;
-  }
-  // Always use replaceStart for the start of the replacement range
-  const replaceRangeForFile = new vscode.Range(
+  const range = new vscode.Range(
     new vscode.Position(replaceStart, 0),
-    new vscode.Position(foundDocblock ? firstNonBlankForFile : replaceEnd, 0)
+    new vscode.Position(replaceEnd, 0)
   );
   await editor.edit((editBuilder: vscode.TextEditorEdit) => {
-    editBuilder.replace(replaceRangeForFile, insertTextForFile);
+    editBuilder.replace(range, docblock.join("\n") + "\n");
   });
 }
 
@@ -387,7 +322,7 @@ export async function generatePHPDocForFile() {
   console.log(`[PHPDoc] Flattened blocks: count = ${allBlocks.length}`);
   allBlocks.sort((a, b) => b.startLine - a.startLine);
   const visited = new Set<string>();
-  // Prepare all edits synchronously
+  // Prepare all edits first
   const edits: { range: vscode.Range; text: string }[] = [];
   for (const block of allBlocks) {
     const blockKey = `${block.type}:${block.startLine}`;
@@ -406,9 +341,7 @@ export async function generatePHPDocForFile() {
       preservedTags: [],
     };
     let docblock: string[] = [];
-
     // --- Extract and parse existing docblock (if any) ---
-    // Extract and parse existing docblock (if any) for the current block
     let docStartForBlock = block.startLine - 1;
     let docEndForBlock = docStartForBlock;
     let hasDocForBlock = false;
@@ -538,8 +471,13 @@ export async function generatePHPDocForFile() {
         otherTags: oldDoc.otherTags,
       };
       docblock = buildDocblock({ ...updated, padding });
-    } else {
-      continue;
+      // REMOVE: Do not generate docblocks for children here. Only process each block in the flattened list once.
+    } else if (block.type === "property") {
+      docblock = buildPropertyDocblock({
+        name: block.name,
+        type: block.returnType,
+        padding,
+      });
     }
     // Find where to insert/replace docblock
     let docStartForFile = block.startLine - 1;
@@ -588,8 +526,6 @@ export async function generatePHPDocForFile() {
       firstNonBlankForFile++;
     }
     // --- Ensure exactly one empty line before docblock unless previous non-blank line is '{' or '<?php' ---
-    // Aggressively remove all blank lines above the docblock
-    // Aggressively remove all blank lines above the docblock (for both new and existing)
     let replaceStart = foundDocblock ? topDocStartForFile : block.startLine;
     while (
       replaceStart > 0 &&
@@ -597,7 +533,6 @@ export async function generatePHPDocForFile() {
     ) {
       replaceStart--;
     }
-    // Find the end of the blank line region after the insertion point
     let replaceEnd = block.startLine;
     while (
       replaceEnd < document.lineCount &&
@@ -605,12 +540,10 @@ export async function generatePHPDocForFile() {
     ) {
       replaceEnd++;
     }
-    // After blank line removal, check the line above
     let lineAboveIdx = replaceStart - 1;
     let lineAboveText =
       lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
     let insertTextForFile = docblock.join("\n") + "\n";
-    // Always add a blank line if the line above is '<?php' or if at the top of the file, but only if not already present
     if (
       (lineAboveText === "<?php" ||
         replaceStart === 0 ||
@@ -619,17 +552,14 @@ export async function generatePHPDocForFile() {
     ) {
       insertTextForFile = "\n" + insertTextForFile;
     }
-    // Always use replaceStart for the start of the replacement range
     const replaceRangeForFile = new vscode.Range(
       new vscode.Position(replaceStart, 0),
       new vscode.Position(foundDocblock ? firstNonBlankForFile : replaceEnd, 0)
     );
-    edits.push({
-      range: replaceRangeForFile,
-      text: insertTextForFile,
-    });
+    edits.push({ range: replaceRangeForFile, text: insertTextForFile });
   }
-  // --- Apply all edits synchronously ---
+  // Apply all edits in a single editor.edit call, bottom to top
+  edits.sort((a, b) => b.range.start.line - a.range.start.line);
   await editor.edit((editBuilder: vscode.TextEditorEdit) => {
     for (const edit of edits) {
       editBuilder.replace(edit.range, edit.text);

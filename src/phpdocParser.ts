@@ -136,12 +136,19 @@ export function parsePHPBlocks(text: string): PHPBlock[] {
                 : [stmt.name?.name || ""];
               for (let i = 0; i < propNames.length; i++) {
                 let propType: string | undefined = undefined;
+                // PATCH: Robustly extract type for all property declaration styles
                 if (stmt.type) {
                   if (typeof stmt.type === "string") {
                     propType = stmt.type;
                   } else if (typeof stmt.type === "object") {
                     propType = stmt.type.name || stmt.type.raw || undefined;
                   }
+                } else if (stmt.flags && stmt.flags.type) {
+                  propType = stmt.flags.type;
+                } else if (stmt.value && stmt.value.kind === "number") {
+                  propType = "int";
+                } else if (stmt.value && stmt.value.kind === "string") {
+                  propType = "string";
                 }
                 addBlock(
                   "property",
