@@ -288,6 +288,16 @@ export async function generatePHPDoc() {
     block,
     docblock
   );
+  // Compare normalized docblock text before replacing
+  const existingDocblockText = document
+    .getText(range)
+    .replace(/\r\n|\r/g, "\n")
+    .trim();
+  const newDocblockText = docblockText.replace(/\r\n|\r/g, "\n").trim();
+  if (existingDocblockText === newDocblockText) {
+    // No change needed
+    return;
+  }
   await editor.edit((editBuilder: vscode.TextEditorEdit) => {
     editBuilder.replace(range, docblockText);
   });
@@ -526,6 +536,16 @@ export async function generatePHPDocForFile() {
       block,
       docblock
     );
+    // Compare normalized docblock text before replacing
+    const existingDocblockText = document
+      .getText(range)
+      .replace(/\r\n|\r/g, "\n")
+      .trim();
+    const newDocblockText = docblockText.replace(/\r\n|\r/g, "\n").trim();
+    if (existingDocblockText === newDocblockText) {
+      // No change needed
+      continue;
+    }
     edits.push({ range, text: docblockText });
   }
   // Apply all edits in a single atomic edit, bottom to top

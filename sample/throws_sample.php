@@ -10,6 +10,11 @@ function single_throw_example($input)
 
 function multiple_throws_example($arg)
 {
+    getSettings("test1");
+    getSettings("test");
+    getSettings("IS_LEAD_CONTACT_PERSON");
+    getSettings("IS_LEAD_INDUSTRY_TYPE");
+
     if (!is_int($arg)) {
         throw new InvalidArgumentException("Argument must be an integer");
     }
