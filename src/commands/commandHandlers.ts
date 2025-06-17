@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import {
   parsePHPBlocks,
+  parsePHPBlocksWithAST,
   PHPBlock,
   collectReturnTypesFromFunctionNode,
 } from "../phpdocParser";
@@ -10,6 +11,7 @@ import {
   parseDocblock,
   updateDocblock,
 } from "../phpdocDocblock";
+import { collectThrowsFromFunctionNode } from "../phpdocThrows";
 import {
   readSettingsCache,
   getDBConfigFromVSCode,
@@ -32,7 +34,7 @@ export async function generatePHPDoc() {
     return;
   }
   const text = document.getText();
-  const blocks = parsePHPBlocks(text);
+  const { blocks, ast } = parsePHPBlocksWithAST(text);
   const pos = editor.selection.active;
   console.log(`[PHPDoc] Cursor at line: ${pos.line}`);
   // Use the improved block finder
@@ -124,7 +126,6 @@ export async function generatePHPDoc() {
     }
     if (!line.startsWith("*") && !line.startsWith("//")) break;
     docStartForBlock--;
-    docEndForBlock--;
   }
   if (hasDocForBlock) {
     docEndForBlock = docStartForBlock;
@@ -190,16 +191,47 @@ export async function generatePHPDoc() {
           types.size > 0 ? Array.from(types).join("|") : "mixed";
       }
     }
-    // --- Collect settings for this block only, excluding children ---
+    // Collect throws for this function
+    let throws: string[] = [];
+    try {
+      // Find the function node for this block
+      function findNodeByLine(node: any, line: number): any {
+        if (!node || !node.loc) return undefined;
+        if (
+          node.loc.start.line - 1 === line ||
+          (node.loc.start.line - 1 <= line && node.loc.end.line - 1 >= line)
+        ) {
+          if (node.kind === "function" || node.kind === "method") return node;
+        }
+        if (node.children) {
+          for (const child of node.children) {
+            const found = findNodeByLine(child, line);
+            if (found) return found;
+          }
+        }
+        if (node.body && node.body.children) {
+          for (const child of node.body.children) {
+            const found = findNodeByLine(child, line);
+            if (found) return found;
+          }
+        }
+        return undefined;
+      }
+      const funcNode = findNodeByLine(ast, block.startLine);
+      if (funcNode) {
+        throws = collectThrowsFromFunctionNode(funcNode);
+      }
+    } catch (e) {
+      throws = [];
+    }
+    // Collect settings for this block only, excluding children
     let blockSettings: string[] = [];
-    // Get all child block line ranges
     const childRanges = (block.children || []).map((child) => [
       child.startLine,
       child.endLine,
     ]);
     const funcLines: string[] = [];
     for (let i = block.startLine; i <= block.endLine; i++) {
-      // Skip lines that are inside any child block
       if (childRanges.some(([start, end]) => i >= start && i <= end)) continue;
       funcLines.push(document.lineAt(i).text);
     }
@@ -224,6 +256,7 @@ export async function generatePHPDoc() {
       otherTags: oldDoc.otherTags,
       settings: blockSettings.length > 0 ? blockSettings : undefined,
       settingsDescriptions,
+      throws, // <-- pass throws
     };
     docblock = buildDocblock({ ...updated, padding });
   } else if (
@@ -262,15 +295,13 @@ export async function generatePHPDoc() {
 
 export async function generatePHPDocForFile() {
   const editor = vscode.window.activeTextEditor;
-  console.log("[PHPDoc] generatePHPDocForFile called");
   if (!editor || editor.document.languageId !== "php") {
-    console.log("[PHPDoc] No active PHP editor");
     return;
   }
   const { document } = editor;
   const text = document.getText();
-  const blocks = parsePHPBlocks(text);
-  console.log(`[PHPDoc] Parsed blocks: count = ${blocks.length}`);
+  const { blocks, ast } = parsePHPBlocksWithAST(text);
+  // Collect all settings for all blocks in the file
   const allSettings = new Set<string>();
   function collectSettingsRecursive(block: PHPBlock) {
     if (block.type === "function") {
@@ -298,7 +329,7 @@ export async function generatePHPDocForFile() {
   if (allSettings.size > 0) {
     settingsDescriptions = await ensureSettingsCache(Array.from(allSettings));
   }
-  // --- Collect all edits first ---
+  // Flatten all blocks (including children) for atomic batch edit
   const allBlocks: PHPBlock[] = [];
   function flattenBlocks(block: PHPBlock) {
     allBlocks.push(block);
@@ -310,13 +341,10 @@ export async function generatePHPDocForFile() {
       block.children.forEach(flattenBlocks);
     }
   }
-  for (const block of blocks) {
-    flattenBlocks(block);
-  }
-  console.log(`[PHPDoc] Flattened blocks: count = ${allBlocks.length}`);
+  for (const block of blocks) flattenBlocks(block);
+  // Sort bottom-to-top to avoid overlapping edits
   allBlocks.sort((a, b) => b.startLine - a.startLine);
   const visited = new Set<string>();
-  // Prepare all edits first
   const edits: { range: vscode.Range; text: string }[] = [];
   for (const block of allBlocks) {
     const blockKey = `${block.type}:${block.startLine}`;
@@ -335,49 +363,37 @@ export async function generatePHPDocForFile() {
       preservedTags: [],
     };
     let docblock: string[] = [];
-    // --- Extract and parse existing docblock (if any) ---
+    // Extract and parse existing docblock (if any)
     let docStartForBlock = block.startLine - 1;
-    let docEndForBlock = docStartForBlock;
-    let hasDocForBlock = false;
+    let foundDocblock = false;
     while (docStartForBlock >= 0) {
       const line = document.lineAt(docStartForBlock).text.trim();
       if (line.startsWith("/**")) {
-        hasDocForBlock = true;
+        foundDocblock = true;
         break;
       }
-      if (!line.startsWith("*") && !line.startsWith("//")) break;
+      if (!line.startsWith("*") && !line.startsWith("//") && line !== "") break;
       docStartForBlock--;
-      docEndForBlock--;
     }
-    if (hasDocForBlock) {
-      docEndForBlock = docStartForBlock;
+    let docEndForBlock = docStartForBlock;
+    if (foundDocblock) {
       while (docEndForBlock < block.startLine) {
         const line = document.lineAt(docEndForBlock).text.trim();
-        if (
-          line.startsWith("//") ||
-          line.startsWith("#") ||
-          line.startsWith("/*")
-        ) {
+        if (line.includes("*/")) {
           docEndForBlock++;
-          continue;
+          break;
         }
-        if (line.includes("*/")) break;
         docEndForBlock++;
       }
-    }
-    if (hasDocForBlock) {
       const docblockLines = [];
-      for (let i = docStartForBlock; i <= docEndForBlock; i++) {
+      for (let i = docStartForBlock; i < docEndForBlock; i++) {
         docblockLines.push(document.lineAt(i).text);
       }
       oldDoc = parseDocblock(docblockLines);
     }
-
     if (block.type === "function") {
-      // --- Unify return type inference with block-level logic ---
       let inferredReturnType = block.returnType;
       if (!inferredReturnType || inferredReturnType === "void") {
-        // Try to infer from return statements in the function body
         const funcStart = document.lineAt(block.startLine).range.start;
         const funcEnd = document.lineAt(block.endLine).range.end;
         let funcText = document.getText(new vscode.Range(funcStart, funcEnd));
@@ -405,9 +421,7 @@ export async function generatePHPDocForFile() {
             else if (/^-?\d+$/.test(ret)) types.add("int");
             else if (/^".*"|'.*'$/.test(ret)) types.add("string");
             else {
-              const newClassMatch = ret.match(
-                /^new\s+([A-Za-z_][A-Za-z0-9_]*)/
-              );
+              const newClassMatch = ret.match(/^new\s+([A-Za-z_][A-ZaZ0-9_]*)/);
               if (newClassMatch) types.add(newClassMatch[1]);
               else types.add("mixed");
             }
@@ -416,16 +430,47 @@ export async function generatePHPDocForFile() {
             types.size > 0 ? Array.from(types).join("|") : "mixed";
         }
       }
-      // --- Collect settings for this block only, excluding children ---
+      // Collect throws for this function
+      let throws: string[] = [];
+      try {
+        // Find the function node for this block
+        function findNodeByLine(node: any, line: number): any {
+          if (!node || !node.loc) return undefined;
+          if (
+            node.loc.start.line - 1 === line ||
+            (node.loc.start.line - 1 <= line && node.loc.end.line - 1 >= line)
+          ) {
+            if (node.kind === "function" || node.kind === "method") return node;
+          }
+          if (node.children) {
+            for (const child of node.children) {
+              const found = findNodeByLine(child, line);
+              if (found) return found;
+            }
+          }
+          if (node.body && node.body.children) {
+            for (const child of node.body.children) {
+              const found = findNodeByLine(child, line);
+              if (found) return found;
+            }
+          }
+          return undefined;
+        }
+        const funcNode = findNodeByLine(ast, block.startLine);
+        if (funcNode) {
+          throws = collectThrowsFromFunctionNode(funcNode);
+        }
+      } catch (e) {
+        throws = [];
+      }
+      // Collect settings for this block only, excluding children
       let blockSettings: string[] = [];
-      // Get all child block line ranges
       const childRanges = (block.children || []).map((child) => [
         child.startLine,
         child.endLine,
       ]);
       const funcLines: string[] = [];
       for (let i = block.startLine; i <= block.endLine; i++) {
-        // Skip lines that are inside any child block
         if (childRanges.some(([start, end]) => i >= start && i <= end))
           continue;
         funcLines.push(document.lineAt(i).text);
@@ -451,6 +496,7 @@ export async function generatePHPDocForFile() {
         otherTags: oldDoc.otherTags,
         settings: blockSettings.length > 0 ? blockSettings : undefined,
         settingsDescriptions,
+        throws, // <-- pass throws
       };
       docblock = buildDocblock({ ...updated, padding });
     } else if (
@@ -467,7 +513,6 @@ export async function generatePHPDocForFile() {
         otherTags: oldDoc.otherTags,
       };
       docblock = buildDocblock({ ...updated, padding });
-      // REMOVE: Do not generate docblocks for children here. Only process each block in the flattened list once.
     } else if (block.type === "property") {
       docblock = buildPropertyDocblock({
         name: block.name,
@@ -475,63 +520,15 @@ export async function generatePHPDocForFile() {
         padding,
       });
     }
-    // Find where to insert/replace docblock
-    let docStartForFile = block.startLine - 1;
-    let foundDocblock = false;
-    // Scan upwards to find the start of an existing docblock (/**)
-    while (docStartForFile >= 0) {
-      const line = document.lineAt(docStartForFile).text.trim();
-      if (line.startsWith("/**")) {
-        foundDocblock = true;
-        break;
-      }
-      if (!line.startsWith("*") && !line.startsWith("//") && line !== "") break;
-      docStartForFile--;
-    }
-    // If found, scan down to the end of the docblock (*/)
-    let docEndForFile = docStartForFile;
-    if (foundDocblock) {
-      while (docEndForFile < document.lineCount) {
-        const line = document.lineAt(docEndForFile).text.trim();
-        if (line.includes("*/")) {
-          docEndForFile++;
-          break;
-        }
-        docEndForFile++;
-      }
-    } else {
-      // If not found, set to block.startLine
-      docStartForFile = block.startLine;
-      docEndForFile = block.startLine;
-    }
-    // Remove blank lines above docblock
-    let replaceStart = docStartForFile;
-    while (
-      replaceStart > 0 &&
-      document.lineAt(replaceStart - 1).text.trim() === ""
-    ) {
-      replaceStart--;
-    }
-    // Remove blank lines after docblock (before code block)
-    let replaceEnd = docEndForFile;
-    while (
-      replaceEnd < document.lineCount &&
-      document.lineAt(replaceEnd).text.trim() === ""
-    ) {
-      replaceEnd++;
-    }
-    let lineAboveIdx = replaceStart - 1;
-    let lineAboveText =
-      lineAboveIdx >= 0 ? document.lineAt(lineAboveIdx).text.trim() : "";
-    // Use the shared utility to get the correct replacement range and text
-    const { range, text: insertTextForFile } = getDocblockReplaceRangeAndText(
+    // Use shared utility for correct range and text (guarantees only one docblock per element)
+    const { range, text: docblockText } = getDocblockReplaceRangeAndText(
       document,
       block,
       docblock
     );
-    edits.push({ range, text: insertTextForFile });
+    edits.push({ range, text: docblockText });
   }
-  // Apply all edits in a single editor.edit call, bottom to top
+  // Apply all edits in a single atomic edit, bottom to top
   edits.sort((a, b) => b.range.start.line - a.range.start.line);
   await editor.edit((editBuilder: vscode.TextEditorEdit) => {
     for (const edit of edits) {
@@ -816,6 +813,15 @@ async function ensureSettingsCache(
     cache = readSettingsCache(cachePath);
   } catch (e) {
     cache = {};
+  }
+  // If cache is empty, fetch and update it, then re-read
+  if (!cache || Object.keys(cache).length === 0) {
+    await updateSettingsCacheAll(cachePath);
+    try {
+      cache = readSettingsCache(cachePath);
+    } catch (e) {
+      cache = {};
+    }
   }
   return cache;
 }

@@ -28,7 +28,6 @@ See the [CHANGELOG.md](./CHANGELOG.md) for full details.
   ```
 
 - Parameter and return types are always provided in the docblock, even when not explicitly mentioned in the code (defaults to `mixed` or `void`).
-- **Project-wide docblock generation:** Command: `Generate PHPDoc for Entire Project`, Shortcut: `Ctrl+Alt+2`.
 - **Exclude patterns:** Provided setting to specify folders and files to skip during project-wide docblock generation. The default exclude list is:
   - `**/node_modules/**`
   - `**/vendor/**`
@@ -78,7 +77,6 @@ You can use the following commands via keyboard shortcuts or by searching in the
 | ------------------------------------------ | ---------- | -------------------------------------- |
 | Generate/update PHPDoc for current block   | Ctrl+Alt+0 | PHPDoc: Generate for Current Block     |
 | Generate/update PHPDoc for all blocks/file | Ctrl+Alt+1 | PHPDoc: Generate for File              |
-| Generate/update PHPDoc for entire project  | Ctrl+Alt+2 | PHPDoc: Generate for Entire Project    |
 | Collapse all docblocks in file             | Ctrl+Alt+5 | PHPDoc: Collapse All Docblocks         |
 | Expand all docblocks in file               | Ctrl+Alt+6 | PHPDoc: Expand All Docblocks           |
 | Refresh the settings cache                 | Ctrl+Alt+7 | PHPDoc: Refresh Settings Cache         |

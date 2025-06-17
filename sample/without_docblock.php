@@ -73,8 +73,8 @@ function outer()
  * @settings
  * - test1 : 
  * - test : 
- * - IS_LEAD_CONTACT_PERSON : 
- * - IS_LEAD_INDUSTRY_TYPE : 
+ * - IS_LEAD_CONTACT_PERSON : Is lead contact person required?
+ * - IS_LEAD_INDUSTRY_TYPE : Want Industry Type in Lead
  */
 function add(float $a, string $b)
 {
@@ -99,16 +99,42 @@ function add(float $a, string $b)
     //  * - IS_LEAD_UPLOAD_FILE_ENABLE
     //  *
 
+
     return intval($a + $b);
 }
 
+/**
+ * class OrderProcessor
+ */
 class OrderProcessor
 {
+    /**
+     * @var int
+     */
     private int $orderId;
+
+    /**
+     * @var int
+     */
     public int $orderId1;
+
+    /**
+     * @var int
+     */
     protected int $orderId2;
+
+    /**
+     * @var int
+     */
     public int $orderId3 = 3;
 
+    /**
+     * function deleteUser
+     *
+     * @param int $userId
+     *
+     * @return void
+     */
     public function deleteUser(int $userId) {}
 
     /**
@@ -118,9 +144,19 @@ class OrderProcessor
      *
      * @author Hitesh Vaghela
      *
+     * @param int $userId
+     *
+     * @return void
      */
     public function addUser(int $userId) {}
 
+    /**
+     * function updateUser
+     *
+     * @param int $userId
+     *
+     * @return void
+     */
     protected function updateUser(int $userId) {}
 }
 

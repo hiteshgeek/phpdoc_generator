@@ -28,7 +28,8 @@ export function buildDocblock({
   otherTags = [],
   preservedTags = [],
   padding = 0,
-  settingsDescriptions = {}, // <-- add this
+  settingsDescriptions = {},
+  throws = [], // <-- add throws
 }: DocblockInfo & {
   name?: string;
   settings?: string[];
@@ -36,7 +37,8 @@ export function buildDocblock({
   otherTags?: string[];
   preservedTags?: string[];
   padding?: number | string;
-  settingsDescriptions?: Record<string, string>; // <-- add this
+  settingsDescriptions?: Record<string, string>;
+  throws?: string[]; // <-- add throws
 }): string[] {
   const pad =
     typeof padding === "string"
@@ -108,7 +110,10 @@ export function buildDocblock({
   }
 
   // Parse preservedTags and otherTags, keeping order
-  const allTags = (preservedTags || []).concat(otherTags || []);
+  // Remove all existing @throws tags to prevent duplication
+  const allTags = (preservedTags || [])
+    .concat(otherTags || [])
+    .filter((tag) => !/^\s*\*?\s?@throws\b/.test(tag));
   const paramTags: string[] = [];
   const returnTags: string[] = [];
   const knownTags: { tag: string; line: string }[] = [];
@@ -184,6 +189,14 @@ export function buildDocblock({
     }
   }
 
+  // --- 4.5 Throws group ---
+  const throwsLines: string[] = [];
+  if (throws && throws.length > 0) {
+    for (const t of throws) {
+      throwsLines.push(pad + ` * @throws ${t}`);
+    }
+  }
+
   // --- 5. Return group ---
   let returnLine: string | undefined = undefined;
   // Only add @return for functions and methods
@@ -231,6 +244,7 @@ export function buildDocblock({
   if (summaryGroup.length > 0) groups.push(summaryGroup);
   if (knownTagsGroup.length > 0) groups.push(knownTagsGroup);
   if (paramLines.length > 0) groups.push(paramLines);
+  if (throwsLines.length > 0) groups.push(throwsLines); // <-- insert throws after params
   if (returnLine) groups.push([returnLine]);
   if (customTagsGroup.length > 0) groups.push(customTagsGroup);
   if (settingsTagGroup.length > 0) groups.push(settingsTagGroup); // always last
@@ -238,39 +252,11 @@ export function buildDocblock({
   let docblockLines: string[] = [pad + "/**"];
   for (let i = 0; i < groups.length; i++) {
     if (groups[i].length > 0) {
-      // Always add a blank line between groups (except after opening)
-      if (docblockLines.length > 1) {
-        docblockLines.push(pad + " *");
-      }
+      if (docblockLines.length > 1) docblockLines.push(pad + " *"); // blank line between groups
       docblockLines.push(...groups[i]);
     }
   }
-  // Collapse multiple consecutive blank lines (lines that are just ' *')
-  let collapsed: string[] = [];
-  let lastWasBlank = false;
-  for (const line of docblockLines) {
-    if (line.trim() === "*" && lastWasBlank) continue;
-    lastWasBlank = line.trim() === "*";
-    collapsed.push(line);
-  }
-  docblockLines = collapsed;
-  // Remove any accidental or stray closing lines before adding the final '*/'
-  docblockLines = docblockLines.filter((line, idx) => {
-    const trimmed = line.trim();
-    if (idx === 0) return true;
-    // Remove any line that is exactly '* /', '*/', or similar (except the last line)
-    return trimmed !== "* /" && trimmed !== "*/" && trimmed !== "/";
-  });
-  // Remove any trailing blank line (i.e., a line that is just ' *') before the closing */
-  while (
-    docblockLines.length > 1 &&
-    docblockLines[docblockLines.length - 1].trim() === "*"
-  ) {
-    docblockLines.pop();
-  }
-  // Only one closing */
   docblockLines.push(pad + " */");
-  // Always autocorrect before returning
   return autocorrectDocblockLines(docblockLines);
 }
 
