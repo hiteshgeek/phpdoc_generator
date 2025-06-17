@@ -1,12 +1,5 @@
 <?php
 
-/**
- * function lead_add_form
- *
- * @settings
- * - IS_OUTLET_ENABLE : Make Outlet Enable
- * @return void
- */
 function lead_add_form()
 {
     Utility::setHeaderButtons(array(
@@ -55,43 +48,6 @@ function lead_add_form()
     // return $panel->publish();
 }
 
-/**
- * function lead_add_submit
- *
- * @settings
- * - IS_LEAD_FIRST_NAME_MANDATORY : Make First Name Mandatory in Lead
- * - IS_LEAD_LAST_NAME_MANDATORY : Make Last Name Mandatory in Lead
- * - IS_LEAD_SALUTATION_NOT_MANDATORY : Salutation Not Mandatory in Lead
- * - IS_SALUTATION_IN_LEAD_PAGE_HIDE : IS_SALUTATION_IN_LEAD_PAGE_HIDE
- * - IS_LEAD_COMPANY_NAME_MANDATORY : Make Company Name Mandatory in Lead
- * - IS_LEAD_ASSIGNEE_REQUIRE : Make Lead Assignee Require
- * - IS_LEAD_INDUSTRY_TYPE : Want Industry Type in Lead
- * - IS_LEAD_CONTACT_PERSON : IS_LEAD_CONTACT_PERSON
- * - IS_HIDE_LEAD_CURRENT_ADDRESS_DETAILS_ENABLED : IS_HIDE_LEAD_CURRENT_ADDRESS_DETAILS_ENABLED
- * - IS_CUSTOMER_ADDR_LINE_1_MANDATORY : Make Customer Address Line 1 Mandatory
- * - IS_CUSTOMER_ADDR_LINE_2_MANDATORY : Make Customer Address Line 2 Mandatory
- * - IS_CUSTOMER_ADDR_COUNTRY_MANDATORY : Make Customer Address Country Mandatory
- * - IS_CUSTOMER_ADDR_STATE_MANDATORY : Make Customer Address State Mandatory
- * - IS_CUSTOMER_ADDR_CITY_MANDATORY : Make Customer Address City Mandatory
- * - IS_CUSTOMER_ADDR_PIN_CODE_MANDATORY : Make Customer Address Pin Code Mandatory
- * - IS_CAPITAL_NAME : Wants to Show Capital Name
- * - IS_NAME_SAVE_IN_CAMEL_CASE_ENABLE : is Name save in camel case enable
- * - IS_LEAD_COMPANY_NAME : Want Company Name in Lead
- * - IS_LEAD_REVENUE : Want Revenue in Lead
- * - IS_LEAD_EMPLOYEE_STRENGTH : Want Employee Strength in Lead
- * - IS_MARKETING_PERSON_IS_ENABLED : When the setting is enabled, then marketing person field is enabled.
- * - IS_LEAD_MOBILE_UNIQUE : IS_LEAD_MOBILE_UNIQUE
- * - IS_LEAD_NAME_UNIQUE
- * - IS_CONTACT_DETAILS_OWNER_MANDATORY : Make Contact Details of Owner Mandatory
- * - IS_LEAD_FOLLOWUP_ALERT_MODE_MANDATORY
- * - IN_LEAD_TALUKA_IS_ENABLED : IN_LEAD_TALUKA_IS_ENABLED
- * - IN_LEAD_DISTRICT_IS_ENABLED : IN_LEAD_DISTRICT_IS_ENABLED
- * - IS_ROUTE_ENABLE : IS_ROUTE_ENABLE
- * - IS_LEAD_UPLOAD_FILE_ENABLE
- *
- * @param mixed $data
- * @return void
- */
 function lead_add_submit($data)
 {
     $response = new AjaxResponse(FALSE);
@@ -801,13 +757,6 @@ function lead_add_submit($data)
     Utility::ajaxResponseTrue("Lead added successfully", $data, NULL, FALSE);
 }
 
-/**
- * function upload_file
- *
- * @param mixed $files1
- * @param mixed $data2
- * @return void
- */
 function upload_file($files1, $data2)
 {
 
@@ -820,14 +769,6 @@ function upload_file($files1, $data2)
     Utility::ajaxResponseTrue("File Uploaded Successfully", $response);
 }
 
-/**
- * function delete_upload_file
- *
- * @param mixed $files1
- * @param mixed $data2
- *
- * @return void
- */
 function delete_upload_file($files1, $data2)
 {
     if (isset($data['uploaded_name'])) {

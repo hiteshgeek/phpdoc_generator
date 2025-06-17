@@ -1,15 +1,5 @@
 <?php
 
-
-/**
- * function single_throw_example
- *
- * @param mixed $input
- *
- * @throws Exception
- *
- * @return void
- */
 function single_throw_example($input)
 {
     if ($input < 0) {
@@ -18,19 +8,13 @@ function single_throw_example($input)
     // ... function logic ...
 }
 
-/**
- * function multiple_throws_example
- *
- * @param mixed $arg
- *
- * @throws InvalidArgumentException
- * @throws DateException
- * @throws RuntimeException
- *
- * @return void
- */
 function multiple_throws_example($arg)
 {
+    getSettings("test1");
+    getSettings("test");
+    getSettings("IS_LEAD_CONTACT_PERSON");
+    getSettings("IS_LEAD_INDUSTRY_TYPE");
+
     if (!is_int($arg)) {
         throw new InvalidArgumentException("Argument must be an integer");
     }

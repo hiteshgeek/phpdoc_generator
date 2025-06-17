@@ -2,7 +2,7 @@
   "name": "phpdoc-generator-hiteshgeek",
   "displayName": "PHPDoc Generator (hiteshgeek)",
   "description": "Intelligently generates and updates PHPDoc blocks for PHP code. Supports command palette, keyboard shortcut, and preserves user docblock content.",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -24,11 +24,6 @@
       {
         "command": "phpdoc-generator.generatePHPDocForFile",
         "title": "Generate/Update for Current File",
-        "category": "PHPDoc Generator"
-      },
-      {
-        "command": "phpdoc-generator.generatePHPDocForProject",
-        "title": "Generate/Update for Entire Project",
         "category": "PHPDoc Generator"
       },
       {
@@ -61,11 +56,6 @@
       {
         "key": "ctrl+alt+1",
         "command": "phpdoc-generator.generatePHPDocForFile",
-        "when": "editorTextFocus"
-      },
-      {
-        "key": "ctrl+alt+2",
-        "command": "phpdoc-generator.generatePHPDocForProject",
         "when": "editorTextFocus"
       },
       {
